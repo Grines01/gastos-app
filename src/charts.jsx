@@ -1,0 +1,146 @@
+import { useState, useRef } from 'preact/hooks'
+import { money, compactMoney } from './lib/format.js'
+
+// ---------- Torta (dona) ----------
+export function Donut({ data, total, selected, onSelect, center }) {
+  const size = 200, r = 84, w = 26, cx = size / 2, cy = size / 2
+  let acc = 0
+  const sum = data.reduce((s, d) => s + d.value, 0) || 1
+  const arcs = data.map((d) => {
+    const a0 = (acc / sum) * Math.PI * 2; acc += d.value
+    const a1 = (acc / sum) * Math.PI * 2
+    return { ...d, a0, a1 }
+  })
+  const pt = (a, rad) => [cx + rad * Math.sin(a), cy - rad * Math.cos(a)]
+  const path = (a0, a1) => {
+    if (a1 - a0 >= Math.PI * 2 - 1e-6) a1 = a0 + Math.PI * 2 - 1e-4
+    const [x0, y0] = pt(a0, r), [x1, y1] = pt(a1, r)
+    return `M${x0} ${y0}A${r} ${r} 0 ${a1 - a0 > Math.PI ? 1 : 0} 1 ${x1} ${y1}`
+  }
+  const sel = arcs.find((a) => a.id === selected)
+  return (
+    <div class="donut">
+      <svg viewBox={`0 0 ${size} ${size}`} role="img" aria-label="Distribución por categoría">
+        <circle cx={cx} cy={cy} r={r} fill="none" stroke="var(--line)" stroke-width={w} />
+        {arcs.map((a) => (
+          <path d={path(a.a0, a.a1)} fill="none" stroke={a.color} stroke-width={a.id === selected ? w + 8 : w}
+            class="donut-arc" opacity={selected && a.id !== selected ? 0.35 : 1}
+            onClick={() => onSelect?.(a.id === selected ? null : a.id)}>
+            <title>{`${a.label}: ${money(a.value)}`}</title>
+          </path>
+        ))}
+        {/* separadores de 2px del color de superficie */}
+        {arcs.length > 1 && arcs.map((a) => { const [x0, y0] = pt(a.a0, r - w / 2 - 6), [x1, y1] = pt(a.a0, r + w / 2 + 6); return <line x1={x0} y1={y0} x2={x1} y2={y1} stroke="var(--bg)" stroke-width="2" pointer-events="none" /> })}
+      </svg>
+      <div class="donut-center" aria-live="polite">
+        {sel ? (<><span class="dc-label">{sel.label}</span><span class="dc-val num">{money(sel.value, { decimals: false })}</span><span class="dc-sub">{Math.round((sel.value / sum) * 100)}%</span></>)
+          : center}
+      </div>
+    </div>
+  )
+}
+
+// ---------- Barras agrupadas (ingresos vs gastos por mes) ----------
+export function Bars({ data, series }) {
+  const [hi, setHi] = useState(null)
+  const W = 340, Hh = 180, padL = 46, padB = 22, padT = 10
+  const max = Math.max(1, ...data.flatMap((d) => series.map((s) => d[s.key])))
+  const nice = niceMax(max)
+  const plotW = W - padL - 4, plotH = Hh - padB - padT
+  const gw = plotW / data.length
+  const bw = Math.max(3, Math.min(12, (gw - 6) / series.length - 2))
+  const y = (v) => padT + plotH - (v / nice) * plotH
+  const ticks = [0, nice / 2, nice]
+  return (
+    <div class="chart">
+      <svg viewBox={`0 0 ${W} ${Hh}`} role="img" aria-label="Ingresos y gastos por mes">
+        {ticks.map((t) => (<g><line x1={padL} x2={W} y1={y(t)} y2={y(t)} stroke="var(--grid)" stroke-width="1" /><text x={padL - 6} y={y(t) + 4} class="tick" text-anchor="end">{compactMoney(t).replace('$ ', '')}</text></g>))}
+        {data.map((d, i) => {
+          const gx = padL + i * gw + (gw - series.length * (bw + 2)) / 2
+          return (
+            <g onClick={() => setHi(hi === i ? null : i)} class="hit">
+              <rect x={padL + i * gw} y={padT} width={gw} height={plotH + padB} fill="transparent" />
+              {hi === i && <rect x={padL + i * gw + 1} y={padT} width={gw - 2} height={plotH} fill="var(--hover)" rx="4" />}
+              {series.map((s, k) => {
+                const v = d[s.key]; const top = y(v); const h = Math.max(0, padT + plotH - top)
+                return h > 0 ? <path d={roundTop(gx + k * (bw + 2), top, bw, h, Math.min(4, bw / 2, h))} fill={s.color} /> : null
+              })}
+              <text x={padL + i * gw + gw / 2} y={Hh - 6} class="tick" text-anchor="middle">{d.label}</text>
+            </g>
+          )
+        })}
+        <line x1={padL} x2={W} y1={padT + plotH} y2={padT + plotH} stroke="var(--axis)" stroke-width="1" />
+      </svg>
+      {hi !== null && (
+        <div class="tip">
+          <strong>{data[hi].full}</strong>
+          {series.map((s) => <span><i style={{ background: s.color }} />{s.label}: <b class="num">{money(data[hi][s.key], { decimals: false })}</b></span>)}
+        </div>
+      )}
+    </div>
+  )
+}
+function roundTop(x, y, w, h, r) {
+  return `M${x} ${y + h}V${y + r}Q${x} ${y} ${x + r} ${y}H${x + w - r}Q${x + w} ${y} ${x + w} ${y + r}V${y + h}Z`
+}
+function niceMax(v) {
+  const p = Math.pow(10, Math.floor(Math.log10(v)))
+  for (const m of [1, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10]) if (m * p >= v) return m * p
+  return 10 * p
+}
+
+// ---------- Líneas: gasto acumulado del mes ----------
+export function Lines({ series, days, xLabel }) {
+  const [hi, setHi] = useState(null)
+  const ref = useRef()
+  const W = 340, Hh = 180, padL = 46, padB = 22, padT = 12, padR = 8
+  const max = niceMax(Math.max(1, ...series.flatMap((s) => s.values.filter((v) => v != null))))
+  const plotW = W - padL - padR, plotH = Hh - padT - padB
+  const x = (i) => padL + (i / (days - 1)) * plotW
+  const y = (v) => padT + plotH - (v / max) * plotH
+  const pathOf = (vals) => vals.map((v, i) => (v == null ? '' : `${i === 0 || vals[i - 1] == null ? 'M' : 'L'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`)).join('')
+  const onMove = (e) => {
+    const rect = ref.current.getBoundingClientRect()
+    const px = ((e.clientX - rect.left) / rect.width) * W
+    setHi(Math.max(0, Math.min(days - 1, Math.round(((px - padL) / plotW) * (days - 1)))))
+  }
+  return (
+    <div class="chart">
+      <svg ref={ref} viewBox={`0 0 ${W} ${Hh}`} role="img" aria-label="Gasto acumulado" onPointerDown={onMove} onPointerMove={(e) => e.buttons || e.pointerType === 'mouse' ? onMove(e) : null} onPointerLeave={() => setHi(null)}>
+        {[0, max / 2, max].map((t) => (<g><line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="var(--grid)" /><text x={padL - 6} y={y(t) + 4} class="tick" text-anchor="end">{compactMoney(t).replace('$ ', '')}</text></g>))}
+        {[0, Math.floor((days - 1) / 2), days - 1].map((i) => <text x={x(i)} y={Hh - 6} class="tick" text-anchor="middle">{i + 1}</text>)}
+        <line x1={padL} x2={W - padR} y1={padT + plotH} y2={padT + plotH} stroke="var(--axis)" />
+        {series.map((s) => <path d={pathOf(s.values)} fill="none" stroke={s.color} stroke-width="2" stroke-dasharray={s.dashed ? '4 4' : null} stroke-linejoin="round" stroke-linecap="round" />)}
+        {series.map((s) => { const li = lastIdx(s.values); return li >= 0 ? <circle cx={x(li)} cy={y(s.values[li])} r="4" fill={s.color} stroke="var(--bg)" stroke-width="2" /> : null })}
+        {hi !== null && <line x1={x(hi)} x2={x(hi)} y1={padT} y2={padT + plotH} stroke="var(--axis)" />}
+        {hi !== null && series.map((s) => s.values[hi] != null && <circle cx={x(hi)} cy={y(s.values[hi])} r="4" fill={s.color} stroke="var(--bg)" stroke-width="2" />)}
+      </svg>
+      {hi !== null && (
+        <div class="tip">
+          <strong>{xLabel(hi + 1)}</strong>
+          {series.map((s) => s.values[hi] != null && <span><i style={{ background: s.color }} />{s.label}: <b class="num">{money(s.values[hi], { decimals: false })}</b></span>)}
+        </div>
+      )}
+    </div>
+  )
+}
+const lastIdx = (a) => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return i; return -1 }
+
+// ---------- Barras horizontales ----------
+export function HBars({ rows, color }) {
+  const max = Math.max(1, ...rows.map((r) => r.value))
+  return (
+    <ul class="hbars">
+      {rows.map((r) => (
+        <li>
+          <div class="hb-top"><span>{r.label}</span><span class="num">{money(r.value, { decimals: false })}</span></div>
+          <div class="hb-track"><div class="hb-fill" style={{ width: `${Math.max(1.5, (r.value / max) * 100)}%`, background: color }} /></div>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+export function Legend({ items }) {
+  return <div class="legend">{items.map((s) => <span><i class={s.dashed ? 'dash' : ''} style={{ background: s.dashed ? 'none' : s.color, borderColor: s.color }} />{s.label}</span>)}</div>
+}
