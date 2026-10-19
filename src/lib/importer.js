@@ -104,7 +104,10 @@ export function toItems(rows, det) {
         desc: String(get(r, c, 'comentario') || ''), category: String(get(r, c, 'categoria') || ''),
         tags: splitTags(get(r, c, 'etiquetas')), account: String(get(r, c, 'cuenta') || ''), trusted: true,
       }
-      if (txCur && txCur !== 'ARS' && Number.isFinite(txAmt)) { it.currency = txCur; it.origAmount = Math.abs(txAmt); it.rate = Math.abs(amt) / Math.abs(txAmt) }
+      const accCur = get(r, c, 'divisa de la cuenta')
+      const accAmt = parseAmount(get(r, c, 'cantidad en la divisa de la cuenta'))
+      if (txCur === 'USD' && Number.isFinite(txAmt) && txAmt) { it.currency = 'USD'; it.origAmount = Math.abs(txAmt); it.rate = Math.round((Math.abs(amt) / Math.abs(txAmt)) * 100) / 100 }
+      else if (accCur === 'USD' && Number.isFinite(accAmt) && accAmt) { it.currency = 'USD'; it.origAmount = Math.abs(accAmt); it.rate = Math.round((Math.abs(amt) / Math.abs(accAmt)) * 100) / 100 }
       out.push(it)
     } else {
       const date = parseDate(get(r, c, 'fecha')); if (!date) continue
