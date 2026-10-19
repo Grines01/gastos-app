@@ -37,7 +37,7 @@ export async function fetchRate(kind, date, side) {
       try {
         const j = await getJSON(`https://api.argentinadatos.com/v1/cotizaciones/dolares/${kind}/${p}`)
         val = j?.[side] ?? j?.venta ?? null
-      } catch (e) { if (back === 0 && e.name === 'AbortError') throw e }
+      } catch (e) { if (e.name === 'AbortError' || e instanceof TypeError) throw e } // sin red: no insistir
     }
   }
   if (typeof val !== 'number' || !(val > 0)) throw new Error('Sin cotización')

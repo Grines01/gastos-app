@@ -2,9 +2,10 @@ import { useState } from 'preact/hooks'
 import { S, defaultAccountId, catById } from './lib/store.js'
 import { readRows, detect, toItems, propose, commit } from './lib/importer.js'
 import { money, ddmm } from './lib/format.js'
+import { fetchRate } from './lib/rates.js'
 import { Icon, toast, download } from './ui.jsx'
 
-const FORMAT_NAME = { santander: 'Extracto de Santander', mercadopago: 'Reporte de Mercado Pago', gestor: 'Export de Gestor de gastos', simple: 'CSV simple' }
+const FORMAT_NAME = { santander: 'Extracto de Santander', mercadopago: 'Reporte de Mercado Pago', mpmovs: 'Movimientos de Mercado Pago', gestor: 'Export de Gestor de gastos', simple: 'CSV simple' }
 const STATUS = {
   new: null,
   dup: 'Parece ya cargado',
@@ -33,6 +34,13 @@ export function ImportFlow({ onClose, onPending }) {
       const d = detect(raw)
       const items = toItems(raw, d)
       if (!items.length) throw new Error('El archivo no tiene movimientos con fecha y monto.')
+      // movimientos en dólares: cotización del día de cada uno (venta para gastos, compra para ingresos)
+      for (const it of items.filter((x) => x.needsRate)) {
+        try {
+          const rate = await fetchRate(S.settings.rateKind || 'bolsa', it.date, it.amount < 0 ? 'venta' : 'compra')
+          it.rate = rate; it.amount = Math.sign(it.amount) * Math.round(it.origAmount * rate); it.needsRate = false
+        } catch { break } // sin internet: quedan para cargar a mano
+      }
       setDet(d)
       setRows(propose(items, { format: d.format, accountId }))
       setView('all'); setLimit(120); setStep('review')
@@ -96,6 +104,7 @@ export function ImportFlow({ onClose, onPending }) {
           <h3 class="sub-h">Formatos que entiende</h3>
           <ul class="plain">
             <li><b>Santander:</b> el Excel de "Últimos movimientos" del home banking, tal cual se descarga.</li>
+            <li><b>Movimientos de Mercado Pago:</b> la lista de actividad copiada a una planilla, con las columnas Fecha, Hora, Titulo_Descripcion, Tipo_Operacion, Medio_Pago, Estado, Moneda y Monto. Trae el nombre del comercio, así que se categoriza mucho mejor.</li>
             <li><b>Mercado Pago:</b> el reporte de "Dinero en cuenta" (liquidaciones) en .xlsx o .csv. Trae poco detalle de cada pago, así que la categoría la vas a elegir vos o la va a aprender.</li>
             <li><b>Gestor de gastos:</b> el export de gastos o de ingresos, para migrar tu historial.</li>
             <li><b>CSV simple:</b> columnas fecha, monto y descripcion. Opcionales: tipo, moneda, cotizacion, cuenta, categoria, etiquetas. Un monto negativo es un gasto.</li>
@@ -153,7 +162,7 @@ function ImportRow({ r, update }) {
           <span class="imp-desc">{r.it.desc || '(sin descripción)'}</span>
           <span class={`imp-amt num ${kind === 'income' ? 'pos' : ''}`}>{money(r.amount, { sign: kind === 'expense' ? '−' : '+' })}</span>
         </div>
-        {r.it.currency === 'USD' && <p class="imp-note">US$ {(r.it.origAmount / 100).toLocaleString('es-AR')} a {r.it.rate.toLocaleString('es-AR')}</p>}
+        {r.it.currency === 'USD' && <p class="imp-note">US$ {(r.it.origAmount / 100).toLocaleString('es-AR')}{r.it.rate ? ` a ${r.it.rate.toLocaleString('es-AR')}` : ''}</p>}
         {st && (
           <p class={`imp-status s-${r.status}`}>
             {r.hint || st}{r.match ? `: ${ddmm(r.match.date)} · ${catById(r.match.categoryId)?.name || 'sin categoría'}${r.match.note ? ` · ${r.match.note}` : ''} · ${money(r.match.amount)}` : ''}

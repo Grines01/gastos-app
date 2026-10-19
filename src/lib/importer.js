@@ -51,6 +51,8 @@ export function detect(rows) {
       const title = norm((rows[0] || []).join(' '))
       return { format: 'gestor', header: i, col: colMap(h), kind: title.includes('ingreso') ? 'income' : 'expense' }
     }
+    if (has('titulo_descripcion') >= 0 && has('tipo_operacion') >= 0 && has('monto') >= 0)
+      return { format: 'mpmovs', header: i, col: colMap(h) }
     if (has('source_id') >= 0 && has('transaction_amount') >= 0)
       return { format: 'mercadopago', header: i, col: colMap(h) }
     if (has('fecha') >= 0 && (has('monto') >= 0 || has('importe') >= 0))
@@ -95,6 +97,20 @@ export function toItems(rows, det) {
       const raw = String(get(r, c, 'descripcion') || '')
       const desc = cleanBankDesc(raw)
       out.push({ date, amount: amt, desc, raw, ref: String(get(r, c, 'referencia') || '') })
+    } else if (det.format === 'mpmovs') {
+      // "Movimientos" de la app de Mercado Pago copiados a una planilla
+      const estado = norm(get(r, c, 'estado') || 'aprobado')
+      if (!estado.startsWith('aprob')) continue
+      const date = parseDate(get(r, c, 'fecha')); if (!date) continue
+      const amt = parseAmount(get(r, c, 'monto'))
+      if (!Number.isFinite(amt) || amt === 0) continue
+      const desc = String(get(r, c, 'titulo_descripcion') || '').trim()
+      const op = norm(get(r, c, 'tipo_operacion') || '')
+      const it = { date, amount: amt, desc, raw: desc, ref: `${date} ${get(r, c, 'hora') || ''} ${desc}`, viaBank: norm(get(r, c, 'medio_pago') || '').includes('con transferencia') }
+      if (op.startsWith('ingreso de dinero')) { it.skipHint = true; it.hint = 'Ingreso desde tu banco: ya cuenta como transferencia propia' }
+      if (op.startsWith('pago de resumen')) { it.skipHint = true; it.hint = 'Pago de la tarjeta: las compras ya figuran una por una' }
+      if (String(get(r, c, 'moneda') || '').toUpperCase() === 'USD') { it.currency = 'USD'; it.origAmount = Math.abs(amt); it.needsRate = true }
+      out.push(it)
     } else if (det.format === 'mercadopago') {
       const date = parseDate(get(r, c, 'transaction_date')); if (!date) continue
       const amt = parseAmount(get(r, c, 'real_amount', 'transaction_amount'))
@@ -193,7 +209,8 @@ export function propose(items, { format, accountId }) {
         if (rule.note) row.note = rule.note
       }
     }
-    if (it.skipHint && !row.rule) { row.type = 'skip'; row.include = false; row.status = 'skip'; row.hint = 'Probable transferencia desde tu banco' }
+    if (it.skipHint && !row.rule) { row.type = 'skip'; row.include = false; row.status = 'skip'; row.hint = it.hint || 'Probable transferencia desde tu banco' }
+    if (it.needsRate) { row.type = 'skip'; row.include = false; row.status = 'skip'; row.hint = 'En dólares y sin cotización: cargalo a mano' }
     if (existingIds.has(externalId)) { row.status = 'imported'; row.include = false }
     return row
   })
@@ -205,6 +222,12 @@ export function propose(items, { format, accountId }) {
       if (t.type !== (row.it.amount < 0 ? 'expense' : 'income')) continue
       const dd = Math.abs(daysBetween(t.date, row.it.date)); if (dd > 4) continue
       const da = Math.abs(t.amount - row.amount)
+      // dos extractos distintos (ej: Santander y Mercado Pago) solo se pisan si el monto es idéntico al centavo
+      // y hablan de lo mismo (comparten una palabra) o el pago de MP salió del banco ("Con transferencia")
+      if (BANK_SOURCES.includes(t.source)) {
+        if (da !== 0 || dd > 2) continue
+        if (t.source !== format && !row.it.viaBank && !sharesWord(t.rawDesc || t.note, row.it.desc)) continue
+      }
       const exact = da <= 100
       const approx = dd <= 1 && da / row.amount <= 0.02
       if (exact || approx) cands.push({ ri, t, score: (exact ? 0 : 10) + dd + da / row.amount })
@@ -243,7 +266,12 @@ export function propose(items, { format, accountId }) {
   }
   return rows
 }
-const isMerchant = (key) => key && key.length >= 3 && !/^(a|de) /.test(key)
+const BANK_SOURCES = ['santander', 'mercadopago', 'mpmovs']
+const words = (s) => new Set(merchantKey(cleanBankDesc(s || '')).split(' ').filter((w) => w.length >= 4))
+function sharesWord(a, b) { const A = words(a); for (const w of words(b)) if (A.has(w)) return true; return false }
+// marketplaces: venden de todo, no sirven para aprender una categoría
+const MARKETPLACES = /mercado libre|temu|shein|amazon|aliexpress|tienda nube/
+const isMerchant = (key) => key && key.length >= 3 && !/^(a|de) /.test(key) && !MARKETPLACES.test(key)
 function learnFromMatches(rows) {
   const out = {}
   for (const r of rows) {
@@ -297,7 +325,7 @@ export async function commit(rows, { fileName, format }) {
   await bulkAddTxs(txs, txs.length ? batch : null)
   // aprender reglas de lo que el usuario corrigió a mano (solo extractos bancarios)
   let learned = 0
-  if (format === 'santander' || format === 'simple' || format === 'mercadopago') {
+  if (format === 'santander' || format === 'simple' || format === 'mercadopago' || format === 'mpmovs') {
     for (const r of rows) {
       if (!r.touched || !r.key || r.key.length < 3) continue
       const existing = S.rules.find((x) => x.pattern === r.key)
