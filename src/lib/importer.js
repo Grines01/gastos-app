@@ -151,7 +151,7 @@ export function toItems(rows, det) {
       const cur = String(get(r, c, 'moneda') || '').toUpperCase()
       const it = {
         date, amount: amt, desc: String(get(r, c, 'descripcion', 'detalle', 'concepto', 'nota') || ''), ref: String(get(r, c, 'referencia', 'id') || ''),
-        category: get(r, c, 'categoria') ? String(get(r, c, 'categoria')) : '', tags: splitTags(get(r, c, 'etiquetas')),
+        category: get(r, c, 'categoria') && norm(get(r, c, 'categoria')) !== 'sin categoria' ? String(get(r, c, 'categoria')) : '', tags: splitTags(get(r, c, 'etiquetas')),
         account: String(get(r, c, 'cuenta') || ''), note: String(get(r, c, 'nota') || ''), skip: tipo.startsWith('ignor'),
         transfer: tipo.startsWith('transf'), toAccount: String(get(r, c, 'cuenta_destino', 'cuenta destino') || ''),
       }

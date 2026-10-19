@@ -2,6 +2,8 @@ import { useState, useEffect } from 'preact/hooks'
 import { S, put, remove, exportData, importData, saveSettings, undoBatch, balances, catById, accById, wipeAll, requestPersist } from './lib/store.js'
 import { money, parseAmount, today } from './lib/format.js'
 import { toCSV } from './lib/importer.js'
+import { buildXlsx, selectTxs } from './lib/exporter.js'
+import { range } from './lib/period.js'
 import { RATE_KINDS } from './lib/rates.js'
 import { PALETTE, EMOJI_CHOICES, colorFor } from './lib/defaults.js'
 import { Icon, Seg, Sheet, toast, download, confirmDialog } from './ui.jsx'
@@ -12,6 +14,7 @@ export function More({ page, setPage, onImport, nPending, openPending }) {
   if (page === 'tags') return <Sub title="Etiquetas" back={() => setPage(null)}><Tags /></Sub>
   if (page === 'rules') return <Sub title="Reglas de importación" back={() => setPage(null)}><Rules /></Sub>
   if (page === 'batches') return <Sub title="Importaciones" back={() => setPage(null)}><Batches /></Sub>
+  if (page === 'export') return <Sub title="Exportar a Excel" back={() => setPage(null)}><Export /></Sub>
   if (page === 'data') return <Sub title="Backup y datos" back={() => setPage(null)}><Data /></Sub>
   const last = S.settings.lastBackupAt
   const days = last ? Math.floor((Date.now() - last) / 86400000) : null
@@ -26,6 +29,7 @@ export function More({ page, setPage, onImport, nPending, openPending }) {
         <button class="notice" onClick={() => setPage('data')}>{days === null ? 'Nunca hiciste un backup.' : `Tu último backup es de hace ${days} días.`} Tus datos solo están en este teléfono: hacé uno ahora.</button>
       )}
       <ul class="menu">
+        <li><button onClick={() => setPage('export')}><span>Exportar a Excel</span><small>gastos e ingresos</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={openPending}><span>Sin categoría</span><small>{nPending}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('accounts')}><span>Cuentas</span><small>{S.accounts.filter((a) => !a.archived).length}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('categories')}><span>Categorías</span><small>{S.categories.filter((c) => !c.archived).length}</small><Icon name="right" size={18} /></button></li>
@@ -210,6 +214,48 @@ function Batches() {
           <button class="btn ghost sm" onClick={async () => { if (confirmDialog(`Se borran los ${b.count} movimientos de esta importación. ¿Deshacer?`)) { const n = await undoBatch(b.id); toast(`Importación deshecha: ${n} movimientos borrados`) } }}><Icon name="undo" size={16} /> Deshacer</button></div></li>
       ))}
     </ul>
+  )
+}
+
+// ---------- Exportar a Excel ----------
+function Export() {
+  const [what, setWhat] = useState('all')
+  const [when, setWhen] = useState('all')
+  const [from, setFrom] = useState(range({ kind: 'month', anchor: today() })[0])
+  const [to, setTo] = useState(today())
+  const [busy, setBusy] = useState(false)
+  const rg = when === 'month' ? range({ kind: 'month', anchor: today() }) : when === 'year' ? range({ kind: 'year', anchor: today() }) : when === 'custom' ? [from, to] : [null, null]
+  const txs = selectTxs(what, rg[0], rg[1])
+  const n = { expense: txs.filter((t) => t.type === 'expense').length, income: txs.filter((t) => t.type === 'income').length }
+  const name = { expense: 'gastos', income: 'ingresos', all: 'movimientos' }[what]
+  const go = async () => {
+    setBusy(true)
+    try {
+      const blob = await buildXlsx(what, rg[0], rg[1])
+      const suffix = rg[0] ? `${rg[0]}_a_${rg[1]}` : today()
+      await download(`${name}-${suffix}.xlsx`, blob, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    } catch (e) { toast('No se pudo generar el Excel: ' + e.message) }
+    setBusy(false)
+  }
+  return (
+    <div class="pad-x stack">
+      <span class="lbl">Qué exportar</span>
+      <Seg value={what} onChange={setWhat} options={[{ value: 'expense', label: 'Gastos' }, { value: 'income', label: 'Ingresos' }, { value: 'all', label: 'Todo' }]} />
+      <span class="lbl">Período</span>
+      <Seg small value={when} onChange={setWhen} options={[{ value: 'all', label: 'Todo' }, { value: 'month', label: 'Este mes' }, { value: 'year', label: 'Este año' }, { value: 'custom', label: 'Elegir' }]} />
+      {when === 'custom' && (
+        <div class="field-row two">
+          <label class="sel"><span>Desde</span><input type="date" value={from} onInput={(e) => setFrom(e.currentTarget.value)} /></label>
+          <label class="sel"><span>Hasta</span><input type="date" value={to} onInput={(e) => setTo(e.currentTarget.value)} /></label>
+        </div>
+      )}
+      <p class="fine">
+        {what !== 'income' && `${n.expense} gastos`}{what === 'all' && ', '}{what !== 'expense' && `${n.income} ingresos`}
+        {what === 'all' ? '. Cada tipo va en su propia hoja (Gastos, Ingresos y Transferencias).' : '.'} Incluye fecha, categoría, monto, cuenta, etiquetas, descripción y, si fue en dólares, el monto en USD y la cotización.
+      </p>
+      <button class="btn primary" disabled={busy || txs.length === 0} onClick={go}><Icon name="download" size={18} /> {busy ? 'Generando…' : 'Descargar Excel'}</button>
+      <p class="fine">Para un respaldo completo que se pueda restaurar en la app, usá Backup y datos.</p>
+    </div>
   )
 }
 
