@@ -5,9 +5,9 @@ import { money } from './lib/format.js'
 import { NEUTRAL, UNCAT } from './lib/defaults.js'
 import { PeriodBar } from './PeriodBar.jsx'
 import { Donut } from './charts.jsx'
-import { Seg, Empty } from './ui.jsx'
+import { Seg, Empty, Icon } from './ui.jsx'
 
-export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd }) {
+export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nPending, openPending }) {
   const [sel, setSel] = useState(null)
   const rg = range(period)
   const inP = S.txs.filter((t) => inRange(t.date, rg))
@@ -33,6 +33,12 @@ export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd }) 
       <header class="top">
         <Seg value={kind} onChange={(v) => { setKind(v); setSel(null) }} options={[{ value: 'expense', label: 'Gastos' }, { value: 'income', label: 'Ingresos' }]} />
       </header>
+      {nPending > 0 && (
+        <button class="pending-banner" onClick={openPending}>
+          <span><b>{nPending === 1 ? '1 movimiento sin categoría' : `${nPending} movimientos sin categoría`}</b>. Tocá para categorizarlos.</span>
+          <Icon name="right" size={18} />
+        </button>
+      )}
       <PeriodBar period={period} setPeriod={(p) => { setPeriod(p); setSel(null) }} />
 
       {list.length === 0 ? (

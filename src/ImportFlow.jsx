@@ -4,7 +4,7 @@ import { readRows, detect, toItems, propose, commit } from './lib/importer.js'
 import { money, ddmm } from './lib/format.js'
 import { Icon, toast, download } from './ui.jsx'
 
-const FORMAT_NAME = { santander: 'Extracto de Santander', gestor: 'Export de Gestor de gastos', simple: 'CSV simple' }
+const FORMAT_NAME = { santander: 'Extracto de Santander', mercadopago: 'Reporte de Mercado Pago', gestor: 'Export de Gestor de gastos', simple: 'CSV simple' }
 const STATUS = {
   new: null,
   dup: 'Parece ya cargado',
@@ -14,7 +14,7 @@ const STATUS = {
 }
 const TEMPLATE = 'fecha;tipo;monto;moneda;cotizacion;cuenta;categoria;etiquetas;descripcion\n18/10/2026;gasto;12575;ARS;;Principal;Supermercado;;3M supermercados\n15/10/2026;ingreso;1000;USD;1540;Principal;Sueldo;;Sueldo octubre\n'
 
-export function ImportFlow({ onClose }) {
+export function ImportFlow({ onClose, onPending }) {
   const [step, setStep] = useState('pick')
   const [accountId, setAccountId] = useState(defaultAccountId())
   const [file, setFile] = useState(null)
@@ -96,6 +96,7 @@ export function ImportFlow({ onClose }) {
           <h3 class="sub-h">Formatos que entiende</h3>
           <ul class="plain">
             <li><b>Santander:</b> el Excel de "Últimos movimientos" del home banking, tal cual se descarga.</li>
+            <li><b>Mercado Pago:</b> el reporte de "Dinero en cuenta" (liquidaciones) en .xlsx o .csv. Trae poco detalle de cada pago, así que la categoría la vas a elegir vos o la va a aprender.</li>
             <li><b>Gestor de gastos:</b> el export de gastos o de ingresos, para migrar tu historial.</li>
             <li><b>CSV simple:</b> columnas fecha, monto y descripcion. Opcionales: tipo, moneda, cotizacion, cuenta, categoria, etiquetas. Un monto negativo es un gasto.</li>
           </ul>
@@ -129,7 +130,8 @@ export function ImportFlow({ onClose }) {
           <p class="done-big num">{result.imported}</p>
           <p class="lead">{result.imported === 1 ? 'movimiento importado' : 'movimientos importados'}{result.learned ? `. Aprendí ${result.learned} ${result.learned === 1 ? 'regla nueva' : 'reglas nuevas'} para la próxima importación.` : '.'}</p>
           <p class="fine">Si algo salió mal, podés deshacer esta importación desde Más → Importaciones.</p>
-          <button class="btn primary" onClick={onClose}>Listo</button>
+          {result.pending > 0 && <button class="btn primary" onClick={onPending}>Categorizar {result.pending} sin categoría</button>}
+          <button class={`btn ${result.pending > 0 ? 'ghost' : 'primary'}`} onClick={onClose}>Listo</button>
         </div>
       )}
     </div>
@@ -154,7 +156,7 @@ function ImportRow({ r, update }) {
         {r.it.currency === 'USD' && <p class="imp-note">US$ {(r.it.origAmount / 100).toLocaleString('es-AR')} a {r.it.rate.toLocaleString('es-AR')}</p>}
         {st && (
           <p class={`imp-status s-${r.status}`}>
-            {st}{r.match ? `: ${ddmm(r.match.date)} · ${catById(r.match.categoryId)?.name || 'sin categoría'}${r.match.note ? ` · ${r.match.note}` : ''} · ${money(r.match.amount)}` : ''}
+            {r.hint || st}{r.match ? `: ${ddmm(r.match.date)} · ${catById(r.match.categoryId)?.name || 'sin categoría'}${r.match.note ? ` · ${r.match.note}` : ''} · ${money(r.match.amount)}` : ''}
           </p>
         )}
         <div class="imp-ctrls">

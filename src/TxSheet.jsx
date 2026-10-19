@@ -53,7 +53,7 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
   }, [open, currency, date, type])
 
   const raw = parseAmount(amountStr)
-  const rate = parseFloat(String(rateStr).replace(/\./g, '').replace(',', '.'))
+  const rate = parseAmount(rateStr) / 100
   const ars = currency === 'USD' ? (Number.isFinite(raw) && rate > 0 ? Math.round(Math.abs(raw) * rate) : NaN) : Math.abs(raw)
   const valid = Number.isFinite(ars) && ars > 0
   const cats = S.categories.filter((c) => c.kind === type && !c.archived)
@@ -87,7 +87,12 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
   const toggleTag = (id) => setTagIds((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id]))
 
   return (
-    <Sheet open={open} onClose={onClose} title={editing ? `Editar ${TYPE_LABEL[type].toLowerCase()}` : null} full>
+    <Sheet open={open} onClose={onClose} title={editing ? 'Editar movimiento' : null} full>
+      {editing && (
+        <div class="pad-x edit-type">
+          <Seg small value={type} onChange={(v) => { setType(v); if (v !== tx.type) setCategoryId(null); else setCategoryId(tx.categoryId) }} options={[{ value: 'expense', label: 'Gasto' }, { value: 'income', label: 'Ingreso' }, { value: 'transfer', label: 'Transferencia' }]} />
+        </div>
+      )}
       {!editing && (
         <div class="sheet-head">
           <Seg value={type} onChange={(v) => { setType(v); setCategoryId(null) }} options={[{ value: 'expense', label: 'Gasto' }, { value: 'income', label: 'Ingreso' }, { value: 'transfer', label: 'Transferencia' }]} />
@@ -98,8 +103,9 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
         <div class={`amount-row t-${type}`}>
           <button class="cur" onClick={() => setCurrency(currency === 'ARS' ? 'USD' : 'ARS')} aria-label="Cambiar moneda">{currency === 'ARS' ? '$' : 'US$'}</button>
           <input ref={amountRef} class="amount-input num" inputmode="decimal" enterkeyhint="done" placeholder="0" value={amountStr}
-            onInput={(e) => setAmountStr(e.currentTarget.value)} onKeyDown={(e) => e.key === 'Enter' && (type === 'transfer' || editing || categoryId) && save()} aria-label="Monto" />
+            onInput={(e) => setAmountStr(e.currentTarget.value)} onKeyDown={(e) => { if (e.key !== 'Enter') return; if (type === 'transfer' || editing) save(); else e.currentTarget.blur() }} aria-label="Monto" />
         </div>
+        {editing && tx.rawDesc && tx.rawDesc !== tx.note && <p class="fine raw-desc">Del extracto: {tx.rawDesc}</p>}
         {currency === 'USD' && (
           <div class="rate-row">
             <label>Cotización {RATE_KINDS.find((k) => k.id === (S.settings.rateKind || 'bolsa'))?.name}

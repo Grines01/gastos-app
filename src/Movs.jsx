@@ -6,7 +6,7 @@ import { NEUTRAL } from './lib/defaults.js'
 import { PeriodBar } from './PeriodBar.jsx'
 import { Icon, Empty } from './ui.jsx'
 
-export function Movs({ period, setPeriod, filter, setFilter, onEdit, onImport }) {
+export function Movs({ period, setPeriod, filter, setFilter, onEdit, onImport, openPending }) {
   const [limit, setLimit] = useState(200)
   const rg = range(period)
   const q = norm(filter.q || '')
@@ -64,8 +64,8 @@ export function Movs({ period, setPeriod, filter, setFilter, onEdit, onImport })
         {active && <button class="link-btn" onClick={() => set({ type: 'all', categoryId: null, accountId: null, tagId: null })}>Limpiar</button>}
       </div>
       {uncat > 0 && filter.categoryId !== 'none' && (
-        <button class="notice" onClick={() => set({ categoryId: 'none', type: 'all' })}>
-          {uncat === 1 ? 'Hay 1 movimiento sin categoría' : `Hay ${uncat} movimientos sin categoría`} en este período. Ver y categorizar
+        <button class="notice" onClick={openPending}>
+          {uncat === 1 ? 'Hay 1 movimiento sin categoría' : `Hay ${uncat} movimientos sin categoría`} en este período. Categorizar
         </button>
       )}
       <div class="sum-line">

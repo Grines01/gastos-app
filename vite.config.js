@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [
     preact(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['icon.svg', 'icon-192.png'],
       manifest: {
         name: 'Mis gastos',

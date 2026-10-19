@@ -6,7 +6,7 @@ import { RATE_KINDS } from './lib/rates.js'
 import { PALETTE, EMOJI_CHOICES, colorFor } from './lib/defaults.js'
 import { Icon, Seg, Sheet, toast, download, confirmDialog } from './ui.jsx'
 
-export function More({ page, setPage, onImport }) {
+export function More({ page, setPage, onImport, nPending, openPending }) {
   if (page === 'accounts') return <Sub title="Cuentas" back={() => setPage(null)}><Accounts /></Sub>
   if (page === 'categories') return <Sub title="Categorías" back={() => setPage(null)}><Categories /></Sub>
   if (page === 'tags') return <Sub title="Etiquetas" back={() => setPage(null)}><Tags /></Sub>
@@ -26,6 +26,7 @@ export function More({ page, setPage, onImport }) {
         <button class="notice" onClick={() => setPage('data')}>{days === null ? 'Nunca hiciste un backup.' : `Tu último backup es de hace ${days} días.`} Tus datos solo están en este teléfono: hacé uno ahora.</button>
       )}
       <ul class="menu">
+        <li><button onClick={openPending}><span>Sin categoría</span><small>{nPending}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('accounts')}><span>Cuentas</span><small>{S.accounts.filter((a) => !a.archived).length}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('categories')}><span>Categorías</span><small>{S.categories.filter((c) => !c.archived).length}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('tags')}><span>Etiquetas</span><small>{S.tags.length}</small><Icon name="right" size={18} /></button></li>
@@ -203,8 +204,8 @@ function Batches() {
 // ---------- Datos ----------
 function Data() {
   const backup = async () => {
-    await download(`gastos-backup-${today()}.json`, JSON.stringify(exportData()))
-    saveSettings({ lastBackupAt: Date.now() })
+    const done = await download(`gastos-backup-${today()}.json`, JSON.stringify(exportData()))
+    if (done) { saveSettings({ lastBackupAt: Date.now() }); toast('Backup listo') }
   }
   const restore = async (f) => {
     try {

@@ -1,72 +1,104 @@
-import { useState } from 'preact/hooks'
+import { useEffect, useState } from 'preact/hooks'
 import { S, tagById, balances, catById } from './lib/store.js'
-import { money as money0, today, fromISO, toISO, monthName, monthShort, pad } from './lib/format.js'
+import { money as money0, today, monthName, monthShort, pad, shortDate } from './lib/format.js'
+import { getSeries, monthlyAvg, RATE_KINDS } from './lib/rates.js'
 import { Bars, Lines, HBars, Legend } from './charts.jsx'
-import { Icon } from './ui.jsx'
+import { Icon, Seg } from './ui.jsx'
 
 const money = (c, o = {}) => money0(c, { decimals: false, ...o })
+const usd = (cents) => `US$ ${Math.round(cents / 100).toLocaleString('es-AR')}`
 const C_INC = 'var(--series-1)'
 const C_EXP = 'var(--series-2)'
 const C_PREV = 'var(--muted)'
+const cap = (s) => s[0].toUpperCase() + s.slice(1)
+const key = (y, m) => { const d = new Date(y, m, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}` }
+const isFixed = (t) => (t.tagIds || []).some((id) => tagById(id)?.name.toLowerCase() === 'fijo')
 
 export function Dashboard({ openAccounts }) {
   const [anchor, setAnchor] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1) })
+  const [unit, setUnit] = useState('ARS')
+  const [fx, setFx] = useState(null) // { '2026-10': 1540, ... }
+  const rateKind = S.settings.rateKind || 'bolsa'
+  useEffect(() => { let alive = true; getSeries(rateKind).then((s) => alive && s && setFx(monthlyAvg(s))); return () => { alive = false } }, [rateKind])
+
   const y = anchor.getFullYear(), m = anchor.getMonth()
-  const key = (yy, mm) => `${yy}-${pad(mm + 1)}`
-  const cur = key(y, m)
+  const cur = key(y, m), prev = key(y, m - 1)
   const prevD = new Date(y, m - 1, 1)
-  const prev = key(prevD.getFullYear(), prevD.getMonth())
   const isCurrentMonth = cur === today().slice(0, 7)
-  const dayNow = isCurrentMonth ? Number(today().slice(8)) : new Date(y, m + 1, 0).getDate()
   const daysCur = new Date(y, m + 1, 0).getDate()
-  const daysPrev = new Date(prevD.getFullYear(), prevD.getMonth() + 1, 0).getDate()
+  const daysPrev = new Date(y, m, 0).getDate()
+  const dayNow = isCurrentMonth ? Number(today().slice(8)) : daysCur
 
   const exp = S.txs.filter((t) => t.type === 'expense')
   const inc = S.txs.filter((t) => t.type === 'income')
-  const sumMonth = (arr, k) => arr.filter((t) => t.date.startsWith(k)).reduce((s, t) => s + t.amount, 0)
+  const sumM = (arr, k, f) => arr.reduce((s, t) => (t.date.startsWith(k) && (!f || f(t)) ? s + t.amount : s), 0)
+  const hasData = (k) => S.txs.some((t) => t.date.startsWith(k))
 
-  // acumulado diario
+  // ---- mes elegido
+  const spent = sumM(exp, cur), earned = sumM(inc, cur)
+  const fixed = sumM(exp, cur, isFixed)
+  const variable = spent - fixed
+  // ---- referencia: promedio de los 3 meses anteriores con datos
+  const prevKeys = [1, 2, 3].map((i) => key(y, m - i)).filter(hasData)
+  const avg = (fn) => (prevKeys.length ? prevKeys.reduce((s, k) => s + fn(k), 0) / prevKeys.length : null)
+  const avgSpent = avg((k) => sumM(exp, k))
+  const avgFixed = avg((k) => sumM(exp, k, isFixed)) || 0
+  const avgSave = avg((k) => { const i = sumM(inc, k); return i > 0 ? (i - sumM(exp, k)) / i : 0 })
+  // ---- proyección de cierre: fijos habituales + ritmo diario de los variables
+  const projected = isCurrentMonth && dayNow >= 3 ? Math.max(fixed, avgFixed) + (variable / dayNow) * daysCur : null
+  const saveRate = earned > 0 ? (earned - spent) / earned : null
+  const daily = variable / Math.max(1, dayNow)
+  const fxCur = fx?.[cur] || (fx ? Object.values(fx).at(-1) : null)
+
+  // ---- acumulado diario
   const cum = (k, days, upto) => {
     const v = Array(days).fill(0)
-    for (const t of exp) if (t.date.startsWith(k)) v[Number(t.date.slice(8)) - 1] += t.amount
-    const out = []; let s = 0
-    for (let i = 0; i < days; i++) { s += v[i]; out.push(i < upto ? s : null) }
-    return out
+    for (const t of exp) if (t.date.startsWith(k)) { const d = Number(t.date.slice(8)) - 1; if (d < days) v[d] += t.amount }
+    let s = 0
+    return v.map((x, i) => { s += x; return i < upto ? s : null })
   }
   const days = Math.max(daysCur, daysPrev)
   const curCum = cum(cur, days, Math.min(dayNow, daysCur))
   const prevCum = cum(prev, days, daysPrev)
-  const spentCur = sumMonth(exp, cur)
-  const prevAtSameDay = prevCum[Math.min(dayNow, daysPrev) - 1] || 0
-  const delta = spentCur - prevAtSameDay
 
-  // últimos 12 meses
+  // ---- últimos 12 meses (en pesos o en dólares al promedio del mes)
   const months = []
   for (let i = 11; i >= 0; i--) {
-    const d = new Date(y, m - i, 1); const k = key(d.getFullYear(), d.getMonth())
-    months.push({ label: monthShort(d.getMonth()).slice(0, 1).toUpperCase() + monthShort(d.getMonth()).slice(1, 3), full: `${cap(monthName(d.getMonth()))} ${d.getFullYear()}`, inc: sumMonth(inc, k), exp: sumMonth(exp, k) })
+    const d = new Date(y, m - i, 1), k = key(d.getFullYear(), d.getMonth())
+    const r = unit === 'USD' ? fx?.[k] : 1
+    const conv = (v) => (r ? v / r : 0)
+    months.push({ label: cap(monthShort(d.getMonth())), full: `${cap(monthName(d.getMonth()))} ${d.getFullYear()}`, inc: conv(sumM(inc, k)), exp: conv(sumM(exp, k)) })
   }
 
-  // por etiqueta (mes elegido)
+  // ---- categorías por encima de lo habitual
+  const unusual = []
+  if (prevKeys.length) {
+    const byCat = new Map()
+    for (const t of exp) {
+      const k = t.date.slice(0, 7)
+      if (k !== cur && !prevKeys.includes(k)) continue
+      const e = byCat.get(t.categoryId) || { cur: 0, prev: 0 }
+      if (k === cur) e.cur += t.amount; else e.prev += t.amount
+      byCat.set(t.categoryId, e)
+    }
+    for (const [id, e] of byCat) {
+      const a = e.prev / prevKeys.length
+      if (e.cur > a * 1.25 && e.cur - a > Math.max(1000000, (avgSpent || 0) * 0.02)) unusual.push({ id, cur: e.cur, avg: a })
+    }
+    unusual.sort((a, b) => (b.cur - b.avg) - (a.cur - a.avg))
+  }
+
+  const biggest = exp.filter((t) => t.date.startsWith(cur)).sort((a, b) => b.amount - a.amount).slice(0, 5)
+
   const byTag = new Map()
-  let fixed = 0
-  for (const t of exp) {
-    if (!t.date.startsWith(cur)) continue
-    for (const id of t.tagIds || []) byTag.set(id, (byTag.get(id) || 0) + t.amount)
-    if ((t.tagIds || []).some((id) => tagById(id)?.name.toLowerCase() === 'fijo')) fixed += t.amount
-  }
+  for (const t of exp) if (t.date.startsWith(cur)) for (const id of t.tagIds || []) byTag.set(id, (byTag.get(id) || 0) + t.amount)
   const tagRows = [...byTag.entries()].map(([id, value]) => ({ label: tagById(id)?.name || '—', value })).sort((a, b) => b.value - a.value)
-
-  // categorías que más crecieron vs mes anterior
-  const catDelta = new Map()
-  for (const t of exp) {
-    if (t.date.startsWith(cur)) catDelta.set(t.categoryId, (catDelta.get(t.categoryId) || 0) + t.amount)
-    else if (t.date.startsWith(prev)) catDelta.set(t.categoryId, (catDelta.get(t.categoryId) || 0) - t.amount)
-  }
 
   const bal = balances()
   const accounts = S.accounts.filter((a) => !a.archived)
   const totalBal = accounts.reduce((s, a) => s + (bal[a.id] || 0), 0)
+  const hasInitial = accounts.some((a) => a.initial)
+  const runway = hasInitial && avgSpent > 0 && totalBal > 0 ? totalBal / avgSpent : null
 
   return (
     <main class="screen">
@@ -78,19 +110,33 @@ export function Dashboard({ openAccounts }) {
 
       <section class="hero">
         <p class="hero-label">{isCurrentMonth ? 'Gastado en lo que va del mes' : 'Gastado en el mes'}</p>
-        <p class="hero-val num">{money(spentCur)}</p>
-        {prevAtSameDay > 0 && (
-          <p class="hero-sub">
-            {isCurrentMonth ? `Al día ${dayNow} de ${monthName(prevD.getMonth())} llevabas ${money(prevAtSameDay)}: ` : `En ${monthName(prevD.getMonth())} gastaste ${money(prevAtSameDay)}: `}
-            <b class={delta > 0 ? 'neg' : 'pos'}>{delta > 0 ? `${money(delta)} más` : `${money(-delta)} menos`}</b>
-          </p>
+        <p class="hero-val num">{money(spent)}</p>
+        {fxCur && spent > 0 && <p class="hero-usd num">≈ {usd(spent / fxCur)} al {RATE_KINDS.find((k) => k.id === rateKind)?.name} promedio del mes</p>}
+        {projected != null && (
+          <p class="hero-sub">A este ritmo cerrás el mes en <b class="num">{money(projected)}</b>{avgSpent ? <>, contra un promedio de <b class="num">{money(avgSpent)}</b></> : null}.</p>
         )}
-        <div class="stats3">
-          <div><span>Ingresos</span><b class="num pos">{money(sumMonth(inc, cur))}</b></div>
-          <div><span>Fijos</span><b class="num">{money(fixed)}</b></div>
-          <div><span>Balance</span><b class={`num ${sumMonth(inc, cur) - spentCur >= 0 ? 'pos' : 'neg'}`}>{money(sumMonth(inc, cur) - spentCur, { sign: sumMonth(inc, cur) - spentCur < 0 ? '−' : '' })}</b></div>
-        </div>
+        {projected == null && avgSpent ? (
+          <p class="hero-sub">Tu promedio de los meses anteriores es <b class="num">{money(avgSpent)}</b>: {spent > avgSpent ? <b class="neg">{money(spent - avgSpent)} más</b> : <b class="pos">{money(avgSpent - spent)} menos</b>}.</p>
+        ) : null}
       </section>
+
+      <div class="tiles">
+        <div class="tile">
+          <span class="tile-l">Ahorro del mes</span>
+          <b class={`tile-v num ${saveRate == null ? '' : saveRate >= 0 ? 'pos' : 'neg'}`}>{saveRate == null ? '—' : `${Math.round(saveRate * 100)}%`}</b>
+          <span class="tile-s">{saveRate == null ? 'Sin ingresos cargados' : `${money(earned - spent, { sign: earned - spent < 0 ? '−' : '' })} de ${money(earned)}`}{avgSave != null ? `. Promedio ${Math.round(avgSave * 100)}%` : ''}</span>
+        </div>
+        <div class="tile">
+          <span class="tile-l">Gasto variable por día</span>
+          <b class="tile-v num">{money(daily)}</b>
+          <span class="tile-s">Sin contar los fijos</span>
+        </div>
+        <div class="tile">
+          <span class="tile-l">Fijos</span>
+          <b class="tile-v num">{spent ? `${Math.round((fixed / spent) * 100)}%` : '—'}</b>
+          <span class="tile-s">{money(fixed)} con etiqueta Fijo</span>
+        </div>
+      </div>
 
       <section class="card">
         <h2>Gasto acumulado</h2>
@@ -102,20 +148,45 @@ export function Dashboard({ openAccounts }) {
       </section>
 
       <section class="card">
-        <h2>Ingresos y gastos, últimos 12 meses</h2>
+        <div class="card-head">
+          <h2>Últimos 12 meses</h2>
+          {fx && <Seg small value={unit} onChange={setUnit} options={[{ value: 'ARS', label: 'Pesos' }, { value: 'USD', label: 'Dólares' }]} />}
+        </div>
         <Legend items={[{ label: 'Ingresos', color: C_INC }, { label: 'Gastos', color: C_EXP }]} />
         <Bars data={months} series={[{ key: 'inc', label: 'Ingresos', color: C_INC }, { key: 'exp', label: 'Gastos', color: C_EXP }]} />
+        {unit === 'USD' && <p class="fine">En dólares {RATE_KINDS.find((k) => k.id === rateKind)?.name} al promedio de cada mes: así la inflación no distorsiona la comparación.</p>}
       </section>
 
       <section class="card">
-        <h2>Cambios contra {monthName(prevD.getMonth())}</h2>
-        <ul class="delta-list">
-          {[...catDelta.entries()].filter(([, v]) => v !== 0).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1])).slice(0, 5).map(([id, v]) => {
-            const c = catById(id)
-            return <li><span>{c?.emoji || '❔'} {c?.name || 'Sin categoría'}</span><b class={`num ${v > 0 ? 'neg' : 'pos'}`}>{v > 0 ? '+' : '−'}{money(Math.abs(v)).slice(0)}</b></li>
-          })}
-        </ul>
+        <h2>Por encima de lo habitual</h2>
+        {!prevKeys.length ? <p class="fine">Hace falta al menos un mes anterior con datos para comparar.</p>
+          : unusual.length === 0 ? <p class="fine">Ninguna categoría está por encima de tu promedio de los últimos {prevKeys.length === 1 ? 'mes' : `${prevKeys.length} meses`}.</p>
+          : (
+            <ul class="delta-list">
+              {unusual.slice(0, 5).map((u) => {
+                const c = catById(u.id)
+                return (
+                  <li>
+                    <span>{c?.emoji || '❔'} {c?.name || 'Sin categoría'}<small>Promedio {money(u.avg)}</small></span>
+                    <b class="num neg">+{money(u.cur - u.avg)}</b>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
       </section>
+
+      {biggest.length > 0 && (
+        <section class="card">
+          <h2>Gastos más grandes</h2>
+          <ul class="delta-list">
+            {biggest.map((t) => {
+              const c = catById(t.categoryId)
+              return <li><span>{c?.emoji || '❔'} {t.note || c?.name || 'Sin categoría'}<small>{shortDate(t.date)}{c ? ` · ${c.name}` : ''}</small></span><b class="num">{money(t.amount)}</b></li>
+            })}
+          </ul>
+        </section>
+      )}
 
       {tagRows.length > 0 && (
         <section class="card">
@@ -130,9 +201,9 @@ export function Dashboard({ openAccounts }) {
           {accounts.map((a) => <li><span>{a.name}</span><b class={`num ${(bal[a.id] || 0) < 0 ? 'neg' : ''}`}>{money(bal[a.id] || 0, { sign: (bal[a.id] || 0) < 0 ? '−' : '' })}</b></li>)}
           {accounts.length > 1 && <li class="total"><span>Total</span><b class="num">{money(totalBal, { sign: totalBal < 0 ? '−' : '' })}</b></li>}
         </ul>
-        {accounts.every((a) => !a.initial) && <p class="fine">Los saldos parten de cero. Cargá el saldo inicial de cada cuenta en Más → Cuentas.</p>}
+        {runway != null && <p class="runway">Tus saldos cubren <b class="num">{runway.toLocaleString('es-AR', { maximumFractionDigits: 1 })} meses</b> de gastos al ritmo de tu promedio.</p>}
+        {!hasInitial && <p class="fine">Los saldos parten de cero. Cargá el saldo inicial de cada cuenta en Más → Cuentas para ver saldos reales y cuántos meses de gastos te cubren.</p>}
       </section>
     </main>
   )
 }
-const cap = (s) => s[0].toUpperCase() + s.slice(1)

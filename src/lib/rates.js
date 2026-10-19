@@ -11,9 +11,9 @@ export const RATE_KINDS = [
 
 const cache = new Map()
 
-async function getJSON(url) {
+async function getJSON(url, ms = 6000) {
   const ctrl = new AbortController()
-  const t = setTimeout(() => ctrl.abort(), 6000)
+  const t = setTimeout(() => ctrl.abort(), ms)
   try {
     const r = await fetch(url, { signal: ctrl.signal })
     if (!r.ok) throw new Error(`HTTP ${r.status}`)
@@ -43,4 +43,26 @@ export async function fetchRate(kind, date, side) {
   if (typeof val !== 'number' || !(val > 0)) throw new Error('Sin cotización')
   cache.set(key, val)
   return val
+}
+
+// Serie histórica (para pasar gastos a dólares). Se guarda en el teléfono y se renueva cada 12 h.
+import { db } from './store.js'
+export async function getSeries(kind) {
+  const key = `rates:${kind}`
+  const cached = (await db.meta.get(key))?.value
+  if (cached && Date.now() - cached.fetchedAt < 12 * 3600 * 1000) return cached.data
+  try {
+    const j = await getJSON(`https://api.argentinadatos.com/v1/cotizaciones/dolares/${kind}`, 25000)
+    const data = j.filter((x) => x.fecha >= '2020-01-01' && x.venta > 0).map((x) => [x.fecha, x.venta])
+    await db.meta.put({ key, value: { fetchedAt: Date.now(), data } })
+    return data
+  } catch {
+    return cached?.data || null // sin internet: la última que haya
+  }
+}
+// Promedio de venta por mes: { '2026-10': 1540.3, ... }
+export function monthlyAvg(series) {
+  const acc = {}
+  for (const [f, v] of series || []) { const m = f.slice(0, 7); (acc[m] ||= [0, 0]); acc[m][0] += v; acc[m][1]++ }
+  return Object.fromEntries(Object.entries(acc).map(([m, [s, n]]) => [m, s / n]))
 }

@@ -84,6 +84,14 @@ export async function put(table, obj) {
   sortAll(); emit()
   return o
 }
+export async function bulkPut(table, objs) {
+  if (!objs.length) return
+  await db[table].bulkPut(objs)
+  const byId = new Map(objs.map((o) => [o.id, o]))
+  S[table] = S[table].map((x) => byId.get(x.id) || x)
+  sortAll(); emit()
+}
+export const isPending = (t) => (t.type === 'expense' || t.type === 'income') && !t.categoryId
 export async function remove(table, id) {
   await db[table].delete(id)
   S[table] = S[table].filter((x) => x.id !== id)

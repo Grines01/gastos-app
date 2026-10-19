@@ -51,10 +51,12 @@ export function detect(rows) {
       const title = norm((rows[0] || []).join(' '))
       return { format: 'gestor', header: i, col: colMap(h), kind: title.includes('ingreso') ? 'income' : 'expense' }
     }
+    if (has('source_id') >= 0 && has('transaction_amount') >= 0)
+      return { format: 'mercadopago', header: i, col: colMap(h) }
     if (has('fecha') >= 0 && (has('monto') >= 0 || has('importe') >= 0))
       return { format: 'simple', header: i, col: colMap(h) }
   }
-  throw new Error('No reconozco el formato. Usá un extracto de Santander o un CSV con columnas fecha, monto y descripcion.')
+  throw new Error('No reconozco el formato. Usá un extracto de Santander, el reporte de Mercado Pago o un CSV con columnas fecha, monto y descripcion.')
 }
 function colMap(h) { const m = {}; h.forEach((x, i) => { if (x && m[x] === undefined) m[x] = i }); return m }
 const get = (r, col, ...names) => { for (const n of names) if (col[n] !== undefined && r[col[n]] !== null && r[col[n]] !== undefined && String(r[col[n]]).trim() !== '') return r[col[n]]; return null }
@@ -93,6 +95,20 @@ export function toItems(rows, det) {
       const raw = String(get(r, c, 'descripcion') || '')
       const desc = cleanBankDesc(raw)
       out.push({ date, amount: amt, desc, raw, ref: String(get(r, c, 'referencia') || '') })
+    } else if (det.format === 'mercadopago') {
+      const date = parseDate(get(r, c, 'transaction_date')); if (!date) continue
+      const amt = parseAmount(get(r, c, 'real_amount', 'transaction_amount'))
+      if (!Number.isFinite(amt) || amt === 0) continue
+      const method = norm(get(r, c, 'payment_method_type') || '')
+      const unit = String(get(r, c, 'sub_unit') || get(r, c, 'business_unit') || '').trim()
+      let desc
+      if (amt > 0 && method === 'bank_transfer') desc = 'Ingreso por transferencia bancaria'
+      else if (amt > 0 && !method) desc = 'Rendimientos Mercado Pago'
+      else if (amt > 0) desc = `Cobro Mercado Pago${unit ? ' ' + unit : ''}`
+      else desc = unit ? (/mercado libre/i.test(unit) ? 'Compra Mercado Libre' : `Pago MP ${unit}`) : 'Pago Mercado Pago'
+      const interest = amt > 0 && !method
+      out.push({ date, amount: amt, desc, raw: desc, ref: String(get(r, c, 'source_id') || ''), skipHint: amt > 0 && method === 'bank_transfer', generic: true,
+        ...(interest ? { category: 'Rendimientos', trusted: true } : {}) })
     } else if (det.format === 'gestor') {
       const date = parseDate(get(r, c, 'fecha y hora')); if (!date) continue
       const amt = parseAmount(get(r, c, 'cantidad en la divisa predeterminada'))
@@ -124,8 +140,9 @@ export function toItems(rows, det) {
         transfer: tipo.startsWith('transf'), toAccount: String(get(r, c, 'cuenta_destino', 'cuenta destino') || ''),
       }
       if (cur === 'USD') {
-        const rate = parseFloat(String(get(r, c, 'cotizacion') || '').replace(',', '.'))
-        if (rate > 0) { it.currency = 'USD'; it.origAmount = Math.abs(amt); it.rate = rate; it.amount = Math.sign(amt) * Math.round(Math.abs(amt) * rate) }
+        const rate = parseAmount(get(r, c, 'cotizacion')) / 100
+        const ars = parseAmount(get(r, c, 'monto_ars'))
+        if (rate > 0) { it.currency = 'USD'; it.origAmount = Math.abs(amt); it.rate = rate; it.amount = Math.sign(amt) * (Number.isFinite(ars) && ars ? Math.abs(ars) : Math.round(Math.abs(amt) * rate)) }
       }
       it.trusted = !!it.category
       out.push(it)
@@ -148,7 +165,8 @@ export function propose(items, { format, accountId }) {
   const occ = {}
   const claimed = new Set()
   const rows = items.map((it, i) => {
-    const key = merchantKey(it.desc)
+    // descripciones genéricas (Mercado Pago) no sirven para reglas: cada pago QR dice lo mismo
+    const key = it.generic ? '' : merchantKey(it.desc)
     const base = `${format}|${it.date}|${it.amount}|${it.ref || key}`
     occ[base] = (occ[base] || 0) + 1
     const externalId = `${base}#${occ[base]}`
@@ -175,6 +193,7 @@ export function propose(items, { format, accountId }) {
         if (rule.note) row.note = rule.note
       }
     }
+    if (it.skipHint && !row.rule) { row.type = 'skip'; row.include = false; row.status = 'skip'; row.hint = 'Probable transferencia desde tu banco' }
     if (existingIds.has(externalId)) { row.status = 'imported'; row.include = false }
     return row
   })
@@ -267,8 +286,8 @@ export async function commit(rows, { fileName, format }) {
   const txs = rows.filter((r) => r.include && r.type !== 'skip').map((r, k) => ({
     id: uid(), type: r.type, date: r.it.date, amount: r.amount,
     // transferencia entrante: viene de la otra cuenta hacia la del extracto
-    accountId: r.type === 'transfer' && r.it.amount > 0 ? r.toAccountId : r.accountId,
-    toAccountId: r.type === 'transfer' ? (r.it.amount > 0 ? r.accountId : r.toAccountId) : null,
+    accountId: r.type === 'transfer' && r.it.amount > 0 && !r.it.transfer ? r.toAccountId : r.accountId,
+    toAccountId: r.type === 'transfer' ? (r.it.amount > 0 && !r.it.transfer ? r.accountId : r.toAccountId) : null,
     categoryId: r.type === 'transfer' ? null : r.categoryId, tagIds: r.tagIds, note: r.note || '',
     rawDesc: r.it.raw || r.it.desc, externalId: r.externalId, batchId, source: format,
     currency: r.it.currency || 'ARS', origAmount: r.it.origAmount || null, rate: r.it.rate || null,
@@ -278,7 +297,7 @@ export async function commit(rows, { fileName, format }) {
   await bulkAddTxs(txs, txs.length ? batch : null)
   // aprender reglas de lo que el usuario corrigió a mano (solo extractos bancarios)
   let learned = 0
-  if (format === 'santander' || format === 'simple') {
+  if (format === 'santander' || format === 'simple' || format === 'mercadopago') {
     for (const r of rows) {
       if (!r.touched || !r.key || r.key.length < 3) continue
       const existing = S.rules.find((x) => x.pattern === r.key)
@@ -296,13 +315,13 @@ export async function commit(rows, { fileName, format }) {
       learned++
     }
   }
-  return { imported: txs.length, learned }
+  return { imported: txs.length, learned, pending: txs.filter((t) => (t.type === 'expense' || t.type === 'income') && !t.categoryId).length }
 }
 
 // ---------- exportar CSV (mismo formato que acepta la importación) ----------
 export function toCSV(txs) {
   const esc = (v) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s }
-  const head = ['fecha', 'tipo', 'monto', 'moneda', 'cotizacion', 'cuenta', 'cuenta_destino', 'categoria', 'etiquetas', 'descripcion']
+  const head = ['fecha', 'tipo', 'monto', 'moneda', 'cotizacion', 'monto_ars', 'cuenta', 'cuenta_destino', 'categoria', 'etiquetas', 'descripcion']
   const lines = [head.join(';')]
   for (const t of txs) {
     const acc = S.accounts.find((a) => a.id === t.accountId)?.name || ''
@@ -311,7 +330,7 @@ export function toCSV(txs) {
     const tags = (t.tagIds || []).map((id) => S.tags.find((x) => x.id === id)?.name).filter(Boolean).join(',')
     const usd = t.currency === 'USD'
     const val = usd ? t.origAmount / 100 : t.amount / 100
-    lines.push([t.date, { expense: 'gasto', income: 'ingreso', transfer: 'transferencia' }[t.type], String(val).replace('.', ','), usd ? 'USD' : 'ARS', usd ? String(t.rate).replace('.', ',') : '', acc, to, cat, tags, t.note].map(esc).join(';'))
+    lines.push([t.date, { expense: 'gasto', income: 'ingreso', transfer: 'transferencia' }[t.type], String(val).replace('.', ','), usd ? 'USD' : 'ARS', usd ? String(t.rate).replace('.', ',') : '', usd ? String(t.amount / 100).replace('.', ',') : '', acc, to, cat, tags, t.note].map(esc).join(';'))
   }
   return lines.join('\n')
 }

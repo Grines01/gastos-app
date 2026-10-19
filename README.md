@@ -12,11 +12,14 @@ App personal de gastos e ingresos. Funciona en el teléfono como app instalada (
 - Resumen: gasto acumulado del mes contra el anterior, ingresos y gastos de 12 meses, etiquetas y saldos.
 - Importación de extractos con revisión antes de guardar:
   - Excel de "Últimos movimientos" de Santander.
+  - Reporte de liquidaciones de Mercado Pago (.xlsx o .csv).
   - Export de Gestor de gastos (para migrar el historial).
   - CSV simple: `fecha;monto;descripcion` y opcionales `tipo;moneda;cotizacion;cuenta;categoria;etiquetas`.
 - Detecta lo que ya cargaste a mano (mismo monto ±4 días, o ±2% el mismo día, o un pago que cargaste en dos partes) para no duplicar.
 - Aprende reglas: lo que corregís al importar, y lo que coincide con tus cargas, se aplica la próxima vez.
-- Backup a archivo JSON y export a CSV.
+- Pantalla "Sin categoría": lo importado que quedó sin categoría, con atajos de un toque, selección múltiple y "recordar para este comercio".
+- Resumen: proyección de cierre de mes, tasa de ahorro, gasto variable por día, peso de los fijos, comparación en dólares (MEP promedio del mes), categorías por encima de lo habitual, gastos más grandes y meses cubiertos por tus saldos.
+- Backup a archivo JSON y export a CSV (se puede reimportar sin pérdidas).
 
 ## Desarrollo
 

@@ -61,11 +61,11 @@ export function Sheet({ open, onClose, children, title, full }) {
 }
 
 let toastSet = null
-export function toast(msg, action) { toastSet?.({ msg, action, id: Date.now() }) }
+export function toast(msg, action) { const f = () => toastSet ? toastSet({ msg, action, id: Date.now() }) : setTimeout(f, 300); f() }
 export function Toaster() {
   const [t, setT] = useState(null)
   toastSet = setT
-  useEffect(() => { if (!t) return; const h = setTimeout(() => setT(null), t.action ? 5000 : 2600); return () => clearTimeout(h) }, [t])
+  useEffect(() => { if (!t || t.action?.sticky) return; const h = setTimeout(() => setT(null), t.action ? 5000 : 2600); return () => clearTimeout(h) }, [t])
   if (!t) return null
   return (
     <div class="toast" role="status">
@@ -84,10 +84,15 @@ export function confirmDialog(msg) { return window.confirm(msg) }
 export function download(filename, content, type = 'application/json') {
   const blob = new Blob([content], { type })
   const file = new File([blob], filename, { type })
+  // en el teléfono: menú de compartir (Drive, mail, WhatsApp). Si lo cancelás, no pasa nada.
   if (navigator.canShare?.({ files: [file] }) && /Android|iPhone|iPad/i.test(navigator.userAgent)) {
-    return navigator.share({ files: [file], title: filename }).catch(() => saveBlob(filename, blob))
+    return navigator.share({ files: [file], title: filename }).then(() => true).catch((e) => {
+      if (e?.name === 'AbortError') return false
+      saveBlob(filename, blob); return true
+    })
   }
   saveBlob(filename, blob)
+  return Promise.resolve(true)
 }
 function saveBlob(filename, blob) {
   const a = document.createElement('a')
