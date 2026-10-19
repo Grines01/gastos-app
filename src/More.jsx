@@ -40,8 +40,20 @@ export function More({ page, setPage, onImport, nPending, openPending }) {
         <Seg small value={S.settings.rateKind || 'bolsa'} onChange={(v) => saveSettings({ rateKind: v })} options={RATE_KINDS.map((k) => ({ value: k.id, label: k.name }))} />
       </section>
       <p class="fine center">{S.txs.length} movimientos guardados en este teléfono</p>
+      <p class="fine center">Versión {__VERSION__}</p>
+      <div class="center"><button class="link-btn" onClick={checkUpdate}>Buscar actualizaciones</button></div>
     </main>
   )
+}
+
+async function checkUpdate() {
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration()
+    if (!reg) return toast('Las actualizaciones funcionan con la app instalada')
+    await reg.update()
+    if (reg.waiting || reg.installing) toast('Hay una versión nueva', { label: 'Actualizar', fn: () => { reg.waiting?.postMessage({ type: 'SKIP_WAITING' }); setTimeout(() => location.reload(), 400) }, sticky: true })
+    else toast('Ya tenés la última versión')
+  } catch { toast('No pude buscar actualizaciones. ¿Tenés internet?') }
 }
 
 function Sub({ title, back, children }) {
