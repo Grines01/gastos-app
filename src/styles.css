@@ -284,3 +284,7 @@ h1, h2, h3, p { margin: 0; }
 /* ---------- aviso ---------- */
 .toast { position: fixed; z-index: 50; left: 50%; transform: translateX(-50%); bottom: calc(var(--nav-h) + var(--safe-b) + 14px); display: flex; gap: 16px; align-items: center; background: var(--ink); color: var(--bg); padding: 11px 16px; border-radius: 12px; font-size: 14px; max-width: calc(100% - 32px); box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2); }
 .toast button { color: var(--sun); font-weight: 700; }
+
+/* ---------- instalar ---------- */
+.install-bar { display: flex; align-items: center; gap: 10px; margin: calc(8px + env(safe-area-inset-top, 0px)) 16px 0; padding: 10px 8px 10px 14px; border-radius: var(--radius-m); background: var(--accent-soft); font-size: 14px; }
+.install-bar span { flex: 1; }

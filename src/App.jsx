@@ -22,6 +22,16 @@ export function App() {
   const [morePage, setMorePage] = useState(null)
 
   useEffect(() => { load() }, [])
+  // botón "Instalar app" (Chrome en Android ofrece el evento beforeinstallprompt)
+  const [installEvt, setInstallEvt] = useState(null)
+  useEffect(() => {
+    const onPrompt = (e) => { e.preventDefault(); setInstallEvt(e) }
+    const onInstalled = () => setInstallEvt(null)
+    window.addEventListener('beforeinstallprompt', onPrompt)
+    window.addEventListener('appinstalled', onInstalled)
+    return () => { window.removeEventListener('beforeinstallprompt', onPrompt); window.removeEventListener('appinstalled', onInstalled) }
+  }, [])
+  const install = async () => { installEvt.prompt(); await installEvt.userChoice; setInstallEvt(null) }
   // botón "atrás" de Android cierra hojas y vuelve a Inicio
   useEffect(() => {
     const open = sheet || importing || morePage || tab !== 'home'
@@ -42,6 +52,13 @@ export function App() {
 
   return (
     <>
+      {installEvt && !importing && (
+        <div class="install-bar">
+          <span>Instalá la app en tu teléfono para abrirla como cualquier otra.</span>
+          <button class="btn primary sm" onClick={install}>Instalar</button>
+          <button class="icon-btn sm" onClick={() => setInstallEvt(null)} aria-label="Ahora no"><Icon name="close" size={18} /></button>
+        </div>
+      )}
       {importing ? <ImportFlow onClose={() => setImporting(false)} /> : (
         <>
           {tab === 'home' && <Home period={period} setPeriod={setPeriod} kind={kind} setKind={setKind} onAdd={(type) => setSheet({ type })}
