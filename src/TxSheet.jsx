@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks'
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { S, saveTx, remove, defaultAccountId, saveSettings } from './lib/store.js'
 import { money, parseAmount, today, addDays } from './lib/format.js'
 import { fetchRate, RATE_KINDS } from './lib/rates.js'
@@ -22,7 +22,8 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
   const [more, setMore] = useState(false)
   const amountRef = useRef()
 
-  useEffect(() => {
+  // se inicializa antes de pintar: así no se ve un instante el movimiento anterior ni se pisa lo que ya escribiste
+  useLayoutEffect(() => {
     if (!open) return
     const t = tx || {}
     setType(t.type || initialType)
@@ -58,10 +59,12 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
   const valid = Number.isFinite(ars) && ars > 0
   const cats = S.categories.filter((c) => c.kind === type && !c.archived)
   const accounts = S.accounts.filter((a) => !a.archived)
+  const ready = valid && (editing || type === 'transfer' || !!categoryId)
 
   async function save(catId = categoryId) {
     if (!valid) { amountRef.current?.focus(); toast('Escribí un monto'); return }
     if (type === 'transfer' && (!toAccountId || toAccountId === accountId)) { toast('Elegí una cuenta de destino distinta'); return }
+    if (type !== 'transfer' && !editing && !catId) { toast('Elegí una categoría'); return }
     const obj = {
       ...(tx || {}), type, date, amount: ars, accountId,
       toAccountId: type === 'transfer' ? toAccountId : null,
@@ -83,7 +86,7 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
     toast('Movimiento eliminado', { label: 'Deshacer', fn: () => saveTx(copy) })
   }
 
-  const pickCat = (id) => { setCategoryId(id); if (!editing && valid) save(id) }
+  const pickCat = (id) => setCategoryId(id)
   const toggleTag = (id) => setTagIds((t) => (t.includes(id) ? t.filter((x) => x !== id) : [...t, id]))
 
   return (
@@ -150,7 +153,7 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
 
         {type !== 'transfer' ? (
           <>
-            <p class="hint">{editing ? 'Categoría' : valid ? 'Tocá una categoría para guardar' : 'Escribí el monto y tocá una categoría'}</p>
+            <p class="hint">Categoría</p>
             <div class="cat-grid">
               {cats.map((c) => (
                 <button class={`cat-btn${categoryId === c.id ? ' on' : ''}`} onClick={() => pickCat(c.id)} style={{ '--c': c.color }}>
@@ -162,12 +165,12 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
           </>
         ) : null}
       </div>
-      {(editing || type === 'transfer') && (
-        <div class="sheet-foot">
-          {editing && <button class="btn ghost danger" onClick={del}><Icon name="trash" size={18} /> Eliminar</button>}
-          <button class="btn primary" onClick={() => save()}>{editing ? 'Guardar cambios' : 'Guardar transferencia'}</button>
-        </div>
-      )}
+      <div class="sheet-foot tx-foot">
+        {editing && <button class="btn ghost danger" onClick={del}><Icon name="trash" size={18} /> Eliminar</button>}
+        <button class={`btn primary${ready ? '' : ' dim'}`} onClick={() => save()}>
+          {editing ? 'Guardar cambios' : `Cargar ${TYPE_LABEL[type].toLowerCase()}${valid ? ` · ${money(ars)}` : ''}`}
+        </button>
+      </div>
     </Sheet>
   )
 }

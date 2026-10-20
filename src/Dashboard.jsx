@@ -4,6 +4,7 @@ import { money as money0, today, monthName, monthShort, pad, shortDate } from '.
 import { getSeries, monthlyAvg, RATE_KINDS } from './lib/rates.js'
 import { Bars, Lines, HBars, Legend } from './charts.jsx'
 import { Icon, Seg } from './ui.jsx'
+import { budgetRows, BudgetRow } from './Budgets.jsx'
 
 const money = (c, o = {}) => money0(c, { decimals: false, ...o })
 const usd = (cents) => `US$ ${Math.round(cents / 100).toLocaleString('es-AR')}`
@@ -14,8 +15,7 @@ const cap = (s) => s[0].toUpperCase() + s.slice(1)
 const key = (y, m) => { const d = new Date(y, m, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}` }
 const isFixed = (t) => (t.tagIds || []).some((id) => tagById(id)?.name.toLowerCase() === 'fijo')
 
-export function Dashboard({ openAccounts }) {
-  const [anchor, setAnchor] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1) })
+export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCategory, onEdit }) {
   const [unit, setUnit] = useState('ARS')
   const [fx, setFx] = useState(null) // { '2026-10': 1540, ... }
   const rateKind = S.settings.rateKind || 'bolsa'
@@ -94,6 +94,9 @@ export function Dashboard({ openAccounts }) {
   for (const t of exp) if (t.date.startsWith(cur)) for (const id of t.tagIds || []) byTag.set(id, (byTag.get(id) || 0) + t.amount)
   const tagRows = [...byTag.entries()].map(([id, value]) => ({ label: tagById(id)?.name || '—', value })).sort((a, b) => b.value - a.value)
 
+  const budgets = budgetRows(cur)
+  const pace = isCurrentMonth ? dayNow / daysCur : null
+
   const bal = balances()
   const accounts = S.accounts.filter((a) => !a.archived)
   const totalBal = accounts.reduce((s, a) => s + (bal[a.id] || 0), 0)
@@ -139,6 +142,16 @@ export function Dashboard({ openAccounts }) {
       </div>
 
       <section class="card">
+        <div class="card-head"><h2>Presupuestos</h2><button class="link-btn" onClick={openBudgets}>{S.budgets.length ? 'Editar' : 'Crear'}</button></div>
+        {budgets.length ? (
+          <>
+            <ul class="bud-list">{budgets.map((r) => <BudgetRow {...r} pace={pace} onClick={() => openCategory(r.b.categoryId, cur)} />)}</ul>
+            {pace != null && <p class="fine">La rayita marca cuánto del mes ya pasó: si la barra la supera, vas más rápido de lo que te alcanza.</p>}
+          </>
+        ) : <p class="fine">{S.budgets.length ? 'Ningún presupuesto empieza antes de este mes.' : 'Poné un tope por mes a las categorías que querés controlar. Lo que te sobra pasa al mes siguiente.'}</p>}
+      </section>
+
+      <section class="card">
         <h2>Gasto acumulado</h2>
         <Legend items={[{ label: cap(monthName(m)), color: C_EXP }, { label: cap(monthName(prevD.getMonth())), color: C_PREV, dashed: true }]} />
         <Lines days={days} xLabel={(d) => `Día ${d}`} series={[
@@ -167,8 +180,11 @@ export function Dashboard({ openAccounts }) {
                 const c = catById(u.id)
                 return (
                   <li>
-                    <span>{c?.emoji || '❔'} {c?.name || 'Sin categoría'}<small>Promedio {money(u.avg)}</small></span>
-                    <b class="num neg">+{money(u.cur - u.avg)}</b>
+                    <button class="delta-row" onClick={() => openCategory(u.id || null, cur)}>
+                      <span>{c?.emoji || '❔'} {c?.name || 'Sin categoría'}<small>{money(u.cur)} este mes · promedio {money(u.avg)}</small></span>
+                      <b class="num neg">+{money(u.cur - u.avg)}</b>
+                      <Icon name="right" size={16} />
+                    </button>
                   </li>
                 )
               })}
@@ -182,7 +198,7 @@ export function Dashboard({ openAccounts }) {
           <ul class="delta-list">
             {biggest.map((t) => {
               const c = catById(t.categoryId)
-              return <li><span>{c?.emoji || '❔'} {t.note || c?.name || 'Sin categoría'}<small>{shortDate(t.date)}{c ? ` · ${c.name}` : ''}</small></span><b class="num">{money(t.amount)}</b></li>
+              return <li><button class="delta-row" onClick={() => onEdit(t)}><span>{c?.emoji || '❔'} {t.note || c?.name || 'Sin categoría'}<small>{shortDate(t.date)}{c ? ` · ${c.name}` : ''}</small></span><b class="num">{money(t.amount)}</b><Icon name="right" size={16} /></button></li>
             })}
           </ul>
         </section>

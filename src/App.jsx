@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks'
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 import { useStore, load } from './lib/store.js'
 import { defaultPeriod } from './lib/period.js'
 import { Home } from './Home.jsx'
@@ -23,6 +23,8 @@ export function App() {
   const [importing, setImporting] = useState(false)
   const [morePage, setMorePage] = useState(null)
   const [pending, setPending] = useState(false)
+  const [dashMonth, setDashMonth] = useState(() => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth(), 1) })
+  const [returnTo, setReturnTo] = useState(null) // pestaña a la que vuelve "atrás" (p. ej. de Movimientos a Resumen)
 
   useEffect(() => { load() }, [])
   // botón "Instalar app" (Chrome en Android ofrece el evento beforeinstallprompt)
@@ -39,25 +41,32 @@ export function App() {
   // "trampa" en el historial; cada "atrás" la consume, cierra la capa de arriba y, si queda algo abierto, la repone.
   const layers = (tab !== 'home' ? 1 : 0) + (morePage ? 1 : 0) + (importing ? 1 : 0) + (pending ? 1 : 0) + (sheet ? 1 : 0)
   const trap = useRef(false)
-  useEffect(() => { if (layers > 0 && !trap.current) { history.pushState({ trap: true }, ''); trap.current = true } }, [layers])
+  // useLayoutEffect: la trampa queda puesta en el mismo instante en que se abre la capa (useEffect espera al próximo cuadro)
+  useLayoutEffect(() => { if (layers > 0 && !trap.current) { history.pushState({ trap: true }, ''); trap.current = true } })
+  // el listener se registra una vez y lee siempre el estado más reciente
+  const nav = useRef()
+  nav.current = { sheet, importing, pending, morePage, tab, returnTo }
   useEffect(() => {
     const onPop = () => {
+      const n = nav.current
       trap.current = false
-      if (sheet) setSheet(null)
-      else if (importing) setImporting(false)
-      else if (pending) setPending(false)
-      else if (morePage) setMorePage(null)
-      else if (tab !== 'home') setTab('home')
+      if (n.sheet) setSheet(null)
+      else if (n.importing) setImporting(false)
+      else if (n.pending) setPending(false)
+      else if (n.morePage && !n.returnTo) setMorePage(null)
+      else if (n.tab !== 'home') { setMorePage(null); setTab(n.returnTo || 'home'); setReturnTo(null) }
     }
     window.addEventListener('popstate', onPop)
     return () => window.removeEventListener('popstate', onPop)
-  }, [sheet, importing, pending, morePage, tab])
+  }, [])
 
   if (!S.ready) return <div class="boot">Cargando…</div>
 
   const nPending = S.txs.filter(isPending).length
   const openPending = () => setPending(true)
-  const go = (t) => { setTab(t); setMorePage(null); window.scrollTo(0, 0) }
+  const go = (t) => { setTab(t); setMorePage(null); setReturnTo(null); window.scrollTo(0, 0) }
+  const fromDash = (t) => { go(t); setReturnTo('dash') }
+  const setMore = (p) => { if (p) return setMorePage(p); setMorePage(null); if (returnTo) { setTab(returnTo); setReturnTo(null) } }
 
   return (
     <>
@@ -74,8 +83,15 @@ export function App() {
           {tab === 'home' && <Home period={period} setPeriod={setPeriod} kind={kind} setKind={setKind} onAdd={(type) => setSheet({ type })} nPending={nPending} openPending={openPending}
             openCategory={(categoryId, k) => { if (!categoryId) return openPending(); setFilter({ ...EMPTY_FILTER, type: k, categoryId }); go('movs') }} />}
           {tab === 'movs' && <Movs period={period} setPeriod={setPeriod} filter={filter} setFilter={setFilter} onEdit={(tx) => setSheet({ tx })} onImport={() => setImporting(true)} openPending={openPending} />}
-          {tab === 'dash' && <Dashboard openAccounts={() => { go('more'); setMorePage('accounts') }} />}
-          {tab === 'more' && <More page={morePage} setPage={setMorePage} onImport={() => setImporting(true)} nPending={nPending} openPending={openPending} />}
+          {tab === 'dash' && <Dashboard anchor={dashMonth} setAnchor={setDashMonth} onEdit={(tx) => setSheet({ tx })}
+            openAccounts={() => { fromDash('more'); setMorePage('accounts') }}
+            openBudgets={() => { fromDash('more'); setMorePage('budgets') }}
+            openCategory={(categoryId, month) => {
+              setPeriod({ kind: 'month', anchor: `${month}-01` })
+              if (!categoryId) return openPending()
+              setFilter({ ...EMPTY_FILTER, type: 'expense', categoryId }); fromDash('movs')
+            }} />}
+          {tab === 'more' && <More page={morePage} setPage={setMore} onImport={() => setImporting(true)} nPending={nPending} openPending={openPending} />}
           <nav class="nav" aria-label="Secciones">
             <button class={tab === 'home' ? 'on' : ''} onClick={() => go('home')}><Icon name="home" /><span>Inicio</span></button>
             <button class={tab === 'movs' ? 'on' : ''} onClick={() => go('movs')}><Icon name="list" /><span>Movimientos</span>{nPending > 0 && <i class="nav-badge" aria-label={`${nPending} sin categoría`}>{nPending > 99 ? '99+' : nPending}</i>}</button>

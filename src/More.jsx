@@ -7,8 +7,10 @@ import { range } from './lib/period.js'
 import { RATE_KINDS } from './lib/rates.js'
 import { PALETTE, EMOJI_CHOICES, colorFor } from './lib/defaults.js'
 import { Icon, Seg, Sheet, toast, download, confirmDialog } from './ui.jsx'
+import { BudgetsPage } from './Budgets.jsx'
 
 export function More({ page, setPage, onImport, nPending, openPending }) {
+  if (page === 'budgets') return <Sub title="Presupuestos" back={() => setPage(null)}><BudgetsPage /></Sub>
   if (page === 'accounts') return <Sub title="Cuentas" back={() => setPage(null)}><Accounts /></Sub>
   if (page === 'categories') return <Sub title="Categorías" back={() => setPage(null)}><Categories /></Sub>
   if (page === 'tags') return <Sub title="Etiquetas" back={() => setPage(null)}><Tags /></Sub>
@@ -29,6 +31,7 @@ export function More({ page, setPage, onImport, nPending, openPending }) {
         <button class="notice" onClick={() => setPage('data')}>{days === null ? 'Nunca hiciste un backup.' : `Tu último backup es de hace ${days} días.`} Tus datos solo están en este teléfono: hacé uno ahora.</button>
       )}
       <ul class="menu">
+        <li><button onClick={() => setPage('budgets')}><span>Presupuestos</span><small>{S.budgets.length || ''}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('export')}><span>Exportar a Excel</span><small>gastos e ingresos</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={openPending}><span>Sin categoría</span><small>{nPending}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('accounts')}><span>Cuentas</span><small>{S.accounts.filter((a) => !a.archived).length}</small><Icon name="right" size={18} /></button></li>
@@ -157,7 +160,7 @@ function CategorySheet({ c, onClose }) {
         <span class="lbl">Color</span>
         <div class="color-grid">{PALETTE.map((col) => <button class={v.color === col ? 'on' : ''} style={{ background: col }} onClick={() => setV({ ...v, color: col })} aria-label={col} />)}</div>
         {c.id && <button class="btn ghost" onClick={async () => { await put('categories', { ...v, archived: !v.archived }); onClose() }}>{v.archived ? 'Desarchivar' : 'Archivar (deja de aparecer al cargar)'}</button>}
-        {c.id && count === 0 && <button class="btn ghost danger" onClick={async () => { await remove('categories', c.id); onClose() }}>Eliminar</button>}
+        {c.id && count === 0 && <button class="btn ghost danger" onClick={async () => { for (const b of S.budgets.filter((b) => b.categoryId === c.id)) await remove('budgets', b.id); await remove('categories', c.id); onClose() }}>Eliminar</button>}
         {c.id && count > 0 && <p class="fine">Tiene {count} movimientos: la podés archivar, no eliminar.</p>}
         <button class="btn primary" onClick={save}>Guardar</button>
       </div>
