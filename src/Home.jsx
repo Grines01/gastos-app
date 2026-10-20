@@ -7,7 +7,7 @@ import { PeriodBar } from './PeriodBar.jsx'
 import { Donut } from './charts.jsx'
 import { Seg, Empty, Icon } from './ui.jsx'
 
-export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nPending, openPending }) {
+export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nPending, openPending, nDupes, openDupes }) {
   const [sel, setSel] = useState(null)
   const rg = range(period)
   const inP = S.txs.filter((t) => inRange(t.date, rg))
@@ -36,6 +36,12 @@ export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nP
       {nPending > 0 && (
         <button class="pending-banner" onClick={openPending}>
           <span><b>{nPending === 1 ? '1 movimiento sin categoría' : `${nPending} movimientos sin categoría`}</b>. Tocá para categorizarlos.</span>
+          <Icon name="right" size={18} />
+        </button>
+      )}
+      {nDupes > 0 && (
+        <button class="pending-banner dupe-banner" onClick={openDupes}>
+          <span><b>{nDupes === 1 ? '1 posible duplicado' : `${nDupes} posibles duplicados`}</b>. Revisalos para que no se cuenten dos veces.</span>
           <Icon name="right" size={18} />
         </button>
       )}

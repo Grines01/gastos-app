@@ -9,6 +9,7 @@ import { TxSheet } from './TxSheet.jsx'
 import { ImportFlow } from './ImportFlow.jsx'
 import { Pending } from './Pending.jsx'
 import { isPending } from './lib/store.js'
+import { dupeGroups } from './Dupes.jsx'
 import { Icon, Toaster } from './ui.jsx'
 
 const EMPTY_FILTER = { type: 'all', categoryId: null, accountId: null, tagId: null, q: '' }
@@ -63,6 +64,7 @@ export function App() {
   if (!S.ready) return <div class="boot">Cargando…</div>
 
   const nPending = S.txs.filter(isPending).length
+  const nDupes = dupeGroups().length
   const openPending = () => setPending(true)
   const go = (t) => { setTab(t); setMorePage(null); setReturnTo(null); window.scrollTo(0, 0) }
   const fromDash = (t) => { go(t); setReturnTo('dash') }
@@ -81,6 +83,7 @@ export function App() {
         : pending ? <Pending onBack={() => setPending(false)} onEdit={(tx) => setSheet({ tx })} /> : (
         <>
           {tab === 'home' && <Home period={period} setPeriod={setPeriod} kind={kind} setKind={setKind} onAdd={(type) => setSheet({ type })} nPending={nPending} openPending={openPending}
+            nDupes={nDupes} openDupes={() => { go('more'); setMorePage('dupes'); setReturnTo('home') }}
             openCategory={(categoryId, k) => { if (!categoryId) return openPending(); setFilter({ ...EMPTY_FILTER, type: k, categoryId }); go('movs') }} />}
           {tab === 'movs' && <Movs period={period} setPeriod={setPeriod} filter={filter} setFilter={setFilter} onEdit={(tx) => setSheet({ tx })} onImport={() => setImporting(true)} openPending={openPending} />}
           {tab === 'dash' && <Dashboard anchor={dashMonth} setAnchor={setDashMonth} onEdit={(tx) => setSheet({ tx })}
@@ -91,7 +94,7 @@ export function App() {
               if (!categoryId) return openPending()
               setFilter({ ...EMPTY_FILTER, type: 'expense', categoryId }); fromDash('movs')
             }} />}
-          {tab === 'more' && <More page={morePage} setPage={setMore} onImport={() => setImporting(true)} nPending={nPending} openPending={openPending} />}
+          {tab === 'more' && <More onEdit={(tx) => setSheet({ tx })} page={morePage} setPage={setMore} onImport={() => setImporting(true)} nPending={nPending} openPending={openPending} />}
           <nav class="nav" aria-label="Secciones">
             <button class={tab === 'home' ? 'on' : ''} onClick={() => go('home')}><Icon name="home" /><span>Inicio</span></button>
             <button class={tab === 'movs' ? 'on' : ''} onClick={() => go('movs')}><Icon name="list" /><span>Movimientos</span>{nPending > 0 && <i class="nav-badge" aria-label={`${nPending} sin categoría`}>{nPending > 99 ? '99+' : nPending}</i>}</button>

@@ -8,8 +8,10 @@ import { RATE_KINDS } from './lib/rates.js'
 import { PALETTE, EMOJI_CHOICES, colorFor } from './lib/defaults.js'
 import { Icon, Seg, Sheet, toast, download, confirmDialog } from './ui.jsx'
 import { BudgetsPage } from './Budgets.jsx'
+import { DupesPage, dupeGroups } from './Dupes.jsx'
 
-export function More({ page, setPage, onImport, nPending, openPending }) {
+export function More({ page, setPage, onImport, nPending, openPending, onEdit }) {
+  if (page === 'dupes') return <Sub title="Posibles duplicados" back={() => setPage(null)}><DupesPage onEdit={onEdit} /></Sub>
   if (page === 'budgets') return <Sub title="Presupuestos" back={() => setPage(null)}><BudgetsPage /></Sub>
   if (page === 'accounts') return <Sub title="Cuentas" back={() => setPage(null)}><Accounts /></Sub>
   if (page === 'categories') return <Sub title="Categorías" back={() => setPage(null)}><Categories /></Sub>
@@ -33,6 +35,7 @@ export function More({ page, setPage, onImport, nPending, openPending }) {
       <ul class="menu">
         <li><button onClick={() => setPage('budgets')}><span>Presupuestos</span><small>{S.budgets.length || ''}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('export')}><span>Exportar a Excel</span><small>gastos e ingresos</small><Icon name="right" size={18} /></button></li>
+        <li><button onClick={() => setPage('dupes')}><span>Posibles duplicados</span><small>{dupeGroups().length || ''}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={openPending}><span>Sin categoría</span><small>{nPending}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('accounts')}><span>Cuentas</span><small>{S.accounts.filter((a) => !a.archived).length}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('categories')}><span>Categorías</span><small>{S.categories.filter((c) => !c.archived).length}</small><Icon name="right" size={18} /></button></li>

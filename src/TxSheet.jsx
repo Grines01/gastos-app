@@ -3,6 +3,7 @@ import { S, saveTx, remove, defaultAccountId, saveSettings } from './lib/store.j
 import { money, parseAmount, today, addDays } from './lib/format.js'
 import { fetchRate, RATE_KINDS } from './lib/rates.js'
 import { Sheet, Seg, Icon, toast } from './ui.jsx'
+import { dupesOf } from './Dupes.jsx'
 
 const TYPE_LABEL = { expense: 'Gasto', income: 'Ingreso', transfer: 'Transferencia' }
 
@@ -75,7 +76,9 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
     const saved = await saveTx(obj)
     if (accountId !== S.settings.defaultAccountId) saveSettings({ defaultAccountId: accountId })
     onClose()
+    const other = !editing && dupesOf(saved.id)[0]?.txs.find((t) => t.id !== saved.id)
     if (editing) toast('Cambios guardados')
+    else if (other) toast(`¿Repetido? Ya hay ${money(other.amount, { decimals: false })} el ${other.date.slice(8)}/${other.date.slice(5, 7)}${other.note ? ` (${other.note.slice(0, 24)})` : ''}`, { label: 'Deshacer', fn: () => remove('txs', saved.id) })
     else toast(`${TYPE_LABEL[type]} guardado`, { label: 'Deshacer', fn: () => remove('txs', saved.id) })
   }
 
