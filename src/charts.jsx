@@ -90,14 +90,24 @@ function niceMax(v) {
 }
 
 // ---------- Líneas: gasto acumulado del mes ----------
-export function Lines({ series, days, xLabel }) {
+// opcionales: fit (eje Y ajustado al rango, no desde 0), tick(v) para el eje Y, xTick(i) para el eje X,
+// fmt(v) para el globo, extra(i) para agregar contenido al globo
+export function Lines({ series, days, xLabel, fit, tick, xTick, fmt, extra, label = 'Gasto acumulado' }) {
   const [hi, setHi] = useState(null)
   const ref = useRef()
   const W = 340, Hh = 180, padL = 46, padB = 22, padT = 12, padR = 8
-  const max = niceMax(Math.max(1, ...series.flatMap((s) => s.values.filter((v) => v != null))))
+  const vals = series.flatMap((s) => s.values.filter((v) => v != null))
+  let max = niceMax(Math.max(1, ...vals)), min = 0
+  if (fit && vals.length) {
+    const hi = Math.max(...vals), lo = Math.min(...vals), step = niceMax(Math.max(1, (hi - lo) / 2))
+    min = Math.max(0, Math.floor(lo / step) * step); max = Math.ceil(hi / step) * step
+    if (max - min < step * 2) max = min + step * 2
+  }
   const plotW = W - padL - padR, plotH = Hh - padT - padB
   const x = (i) => padL + (i / (days - 1)) * plotW
-  const y = (v) => padT + plotH - (v / max) * plotH
+  const y = (v) => padT + plotH - ((v - min) / (max - min)) * plotH
+  const tk = tick || ((t) => compactMoney(t).replace('$ ', ''))
+  const ff = fmt || ((v) => money(v, { decimals: false }))
   const pathOf = (vals) => vals.map((v, i) => (v == null ? '' : `${i === 0 || vals[i - 1] == null ? 'M' : 'L'}${x(i).toFixed(1)} ${y(v).toFixed(1)}`)).join('')
   const onMove = (e) => {
     const rect = ref.current.getBoundingClientRect()
@@ -106,9 +116,9 @@ export function Lines({ series, days, xLabel }) {
   }
   return (
     <div class="chart">
-      <svg ref={ref} viewBox={`0 0 ${W} ${Hh}`} role="img" aria-label="Gasto acumulado" onPointerDown={onMove} onPointerMove={(e) => e.buttons || e.pointerType === 'mouse' ? onMove(e) : null} onPointerLeave={() => setHi(null)}>
-        {[0, max / 2, max].map((t) => (<g><line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="var(--grid)" /><text x={padL - 6} y={y(t) + 4} class="tick" text-anchor="end">{compactMoney(t).replace('$ ', '')}</text></g>))}
-        {[0, Math.floor((days - 1) / 2), days - 1].map((i) => <text x={x(i)} y={Hh - 6} class="tick" text-anchor="middle">{i + 1}</text>)}
+      <svg ref={ref} viewBox={`0 0 ${W} ${Hh}`} role="img" aria-label={label} onPointerDown={onMove} onPointerMove={(e) => e.buttons || e.pointerType === 'mouse' ? onMove(e) : null} onPointerLeave={(e) => e.pointerType === 'mouse' && setHi(null)}>
+        {[min, (min + max) / 2, max].map((t) => (<g><line x1={padL} x2={W - padR} y1={y(t)} y2={y(t)} stroke="var(--grid)" /><text x={padL - 6} y={y(t) + 4} class="tick" text-anchor="end">{tk(t)}</text></g>))}
+        {[0, Math.floor((days - 1) / 2), days - 1].map((i) => <text x={x(i)} y={Hh - 6} class="tick" text-anchor={i === 0 ? 'start' : i === days - 1 ? 'end' : 'middle'}>{xTick ? xTick(i) : i + 1}</text>)}
         <line x1={padL} x2={W - padR} y1={padT + plotH} y2={padT + plotH} stroke="var(--axis)" />
         {series.map((s) => <path d={pathOf(s.values)} fill="none" stroke={s.color} stroke-width="2" stroke-dasharray={s.dashed ? '4 4' : null} stroke-linejoin="round" stroke-linecap="round" />)}
         {series.map((s) => { const li = lastIdx(s.values); return li >= 0 ? <circle cx={x(li)} cy={y(s.values[li])} r="4" fill={s.color} stroke="var(--bg)" stroke-width="2" /> : null })}
@@ -118,7 +128,8 @@ export function Lines({ series, days, xLabel }) {
       {hi !== null && (
         <div class="tip">
           <strong>{xLabel(hi + 1)}</strong>
-          {series.map((s) => s.values[hi] != null && <span><i style={{ background: s.color }} />{s.label}: <b class="num">{money(s.values[hi], { decimals: false })}</b></span>)}
+          {series.map((s) => s.values[hi] != null && <span><i style={{ background: s.color }} />{s.label}: <b class="num">{ff(s.values[hi])}</b></span>)}
+          {extra && extra(hi)}
         </div>
       )}
     </div>

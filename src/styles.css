@@ -370,3 +370,15 @@ h1, h2, h3, p { margin: 0; }
 .home-bud { margin-top: 4px; gap: 4px; }
 .bud-row.compact { gap: 5px; padding: 8px 0; }
 .cur-mini { font-weight: 650; color: var(--ink2); background: var(--hover); border-radius: 6px; padding: 3px 7px; font-size: 14px; flex: none; }
+
+/* ---------- dólar ---------- */
+:root { --fx-oficial: #0f7a55; --fx-mep: #6250d6; --fx-blue: #2a78d6; }
+@media (prefers-color-scheme: dark) { :root { --fx-oficial: #3fbf8f; --fx-mep: #9a8ff0; --fx-blue: #4a95ea; } }
+.tip-wide { width: 100%; }
+.fx-table { display: grid; grid-template-columns: auto 1fr auto auto; font-size: 13.5px; white-space: nowrap; }
+.fx-row { display: contents; }
+.fx-row > * { padding: 7px 0 7px 10px; border-bottom: 1px solid var(--line); }
+.fx-row > :first-child { padding-left: 0; }
+.fx-row:last-child > * { border-bottom: 0; }
+.fx-row > :not(:first-child) { text-align: right; }
+.fx-h > * { color: var(--muted); font-size: 12.5px; padding-top: 0; }

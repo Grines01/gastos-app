@@ -13,6 +13,11 @@ const C_EXP = 'var(--series-2)'
 const C_PREV = 'var(--muted)'
 const cap = (s) => s[0].toUpperCase() + s.slice(1)
 const key = (y, m) => { const d = new Date(y, m, 1); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}` }
+const FX_KINDS = [
+  { id: 'oficial', name: 'Oficial', color: 'var(--fx-oficial)' },
+  { id: 'bolsa', name: 'MEP', color: 'var(--fx-mep)' },
+  { id: 'blue', name: 'Blue', color: 'var(--fx-blue)' },
+]
 const isFixed = (t) => (t.tagIds || []).some((id) => tagById(id)?.name.toLowerCase() === 'fijo')
 
 export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCategory, onEdit }) {
@@ -20,6 +25,16 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
   const [fx, setFx] = useState(null) // { '2026-10': 1540, ... }
   const rateKind = S.settings.rateKind || 'bolsa'
   useEffect(() => { let alive = true; getSeries(rateKind).then((s) => alive && s && setFx(monthlyAvg(s))); return () => { alive = false } }, [rateKind])
+  // evolución del dólar: promedio mensual (venta) de oficial, MEP y blue
+  const [dollars, setDollars] = useState(null) // null cargando | 'error' | { oficial, bolsa, blue }
+  useEffect(() => {
+    let alive = true
+    Promise.all(FX_KINDS.map((k) => getSeries(k.id))).then((arr) => {
+      if (!alive) return
+      setDollars(arr.every((x) => !x) ? 'error' : Object.fromEntries(FX_KINDS.map((k, i) => [k.id, arr[i] ? monthlyAvg(arr[i]) : {}])))
+    })
+    return () => { alive = false }
+  }, [])
 
   const y = anchor.getFullYear(), m = anchor.getMonth()
   const cur = key(y, m), prev = key(y, m - 1)
@@ -69,6 +84,21 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
     const conv = (v) => (r ? v / r : 0)
     months.push({ label: cap(monthShort(d.getMonth())), full: `${cap(monthName(d.getMonth()))} ${d.getFullYear()}`, inc: conv(sumM(inc, k)), exp: conv(sumM(exp, k)) })
   }
+
+  // ---- dólar: últimos 12 meses y lo que cobraste en cada uno
+  const fxMonths = []
+  for (let i = 11; i >= 0; i--) {
+    const d = new Date(y, m - i, 1), k = key(d.getFullYear(), d.getMonth())
+    fxMonths.push({ k, short: cap(monthShort(d.getMonth())), full: `${cap(monthName(d.getMonth()))} ${d.getFullYear()}`, income: sumM(inc, k) })
+  }
+  const fxObj = dollars && dollars !== 'error' ? dollars : null
+  const fxSeries = fxObj ? FX_KINDS.map((fk) => ({ label: fk.name, color: fk.color, values: fxMonths.map((mm) => (fxObj[fk.id]?.[mm.k] ? Math.round(fxObj[fk.id][mm.k] * 100) : null)) })) : []
+  const fxHas = fxSeries.some((s) => s.values.some((v) => v != null))
+  const usKind = FX_KINDS.find((k) => k.id === rateKind) ? rateKind : 'bolsa'
+  const usName = FX_KINDS.find((k) => k.id === usKind).name
+  const rateOf = (k) => fxObj?.[usKind]?.[k] || null
+  const incomeRows = fxMonths.filter((mm) => mm.income > 0).reverse()
+  const usdOf = (mm) => (rateOf(mm.k) ? mm.income / rateOf(mm.k) : null)
 
   // ---- categorías por encima de lo habitual
   const unusual = []
@@ -168,6 +198,39 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
         <Legend items={[{ label: 'Ingresos', color: C_INC }, { label: 'Gastos', color: C_EXP }]} />
         <Bars data={months} series={[{ key: 'inc', label: 'Ingresos', color: C_INC }, { key: 'exp', label: 'Gastos', color: C_EXP }]} />
         {unit === 'USD' && <p class="fine">En dólares {RATE_KINDS.find((k) => k.id === rateKind)?.name} al promedio de cada mes: así la inflación no distorsiona la comparación.</p>}
+      </section>
+
+      <section class="card">
+        <h2>Dólar</h2>
+        {dollars === null ? <p class="fine">Buscando cotizaciones…</p>
+          : !fxHas ? <p class="fine">No pude traer las cotizaciones. Se necesita internet la primera vez; después quedan guardadas en el teléfono.</p>
+          : (
+            <>
+              <Legend items={FX_KINDS.map((k) => ({ label: k.name, color: k.color }))} />
+              <Lines label="Evolución del dólar" days={12} series={fxSeries} fit
+                tick={(v) => Math.round(v / 100).toLocaleString('es-AR')}
+                xTick={(i) => fxMonths[i].short} xLabel={(d) => fxMonths[d - 1].full}
+                extra={(i) => { const mm = fxMonths[i]; const u = usdOf(mm); return mm.income > 0 ? <span class="tip-wide">Cobraste <b class="num">{money(mm.income)}</b>{u ? <> = <b class="num">{usd(u)}</b> al {usName}</> : null}</span> : null }} />
+              <p class="fine">Promedio de cada mes, precio de venta. Tocá el gráfico para ver un mes.</p>
+              {incomeRows.length > 0 && (
+                <>
+                  <h3 class="sub-h">Tus ingresos en dólares</h3>
+                  <div class="fx-table" role="table">
+                    <div class="fx-row fx-h" role="row"><span>Mes</span><span>Cobraste</span><span>{usName}</span><span>En US$</span></div>
+                    {incomeRows.map((mm) => (
+                      <div class="fx-row" role="row">
+                        <span>{mm.short} {mm.k.slice(2, 4)}</span>
+                        <span class="num">{money(mm.income)}</span>
+                        <span class="num">{rateOf(mm.k) ? Math.round(rateOf(mm.k)).toLocaleString('es-AR') : '—'}</span>
+                        <b class="num">{usdOf(mm) ? usd(usdOf(mm)) : '—'}</b>
+                      </div>
+                    ))}
+                  </div>
+                  <p class="fine">En US$ = lo que cobraste ese mes dividido el dólar {usName} promedio del mes. El dólar se cambia en Más → Dólar.</p>
+                </>
+              )}
+            </>
+          )}
       </section>
 
       <section class="card">
