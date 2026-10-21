@@ -6,8 +6,8 @@
 
 const DAY = 86400000
 const day = (iso) => Date.UTC(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10)) / DAY
-const words = (t) => new Set(`${t.note || ''} ${t.rawDesc || ''}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !/^\d+$/.test(w) && !STOP.has(w)))
-const STOP = new Set(['compra', 'tarjeta', 'debito', 'credito', 'transferencia', 'realizada', 'inmediata', 'pago', 'cuota', 'para', 'con'])
+const words = (t) => new Set(`${t.note || t.rawDesc || ''}`.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').split(/[^a-z0-9]+/).filter((w) => w.length >= 4 && !/^\d+$/.test(w) && !STOP.has(w)))
+const STOP = new Set(['compra', 'tarjeta', 'debito', 'credito', 'transferencia', 'transf', 'realizada', 'inmediata', 'recibida', 'enviada', 'titular', 'pago', 'cuota', 'para', 'ingreso', 'dinero', 'mercado', 'merpago', 'mercpago'])
 const shareWord = (a, b) => { const wa = words(a); for (const w of words(b)) if (wa.has(w)) return true; return false }
 export const groupKey = (ids) => [...ids].sort().join('|')
 
