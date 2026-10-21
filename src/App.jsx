@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
-import { useStore, load } from './lib/store.js'
+import { useStore, load, setFx } from './lib/store.js'
+import { getSeries, monthlyAvg } from './lib/rates.js'
 import { defaultPeriod } from './lib/period.js'
 import { Home } from './Home.jsx'
 import { Movs } from './Movs.jsx'
@@ -28,6 +29,9 @@ export function App() {
   const [returnTo, setReturnTo] = useState(null) // pestaña a la que vuelve "atrás" (p. ej. de Movimientos a Resumen)
 
   useEffect(() => { load() }, [])
+  // promedio mensual del dólar (para presupuestos en USD); queda guardado en el teléfono
+  const rateKind = S.settings.rateKind || 'bolsa'
+  useEffect(() => { if (!S.ready || !S.budgets.some((b) => b.currency === 'USD')) return; let alive = true; getSeries(rateKind).then((s) => alive && s && setFx(monthlyAvg(s))); return () => { alive = false } }, [S.ready, rateKind, S.budgets.filter((b) => b.currency === 'USD').length])
   // botón "Instalar app" (Chrome en Android ofrece el evento beforeinstallprompt)
   const [installEvt, setInstallEvt] = useState(null)
   useEffect(() => {
@@ -84,6 +88,7 @@ export function App() {
         <>
           {tab === 'home' && <Home period={period} setPeriod={setPeriod} kind={kind} setKind={setKind} onAdd={(type) => setSheet({ type })} nPending={nPending} openPending={openPending}
             nDupes={nDupes} openDupes={() => { go('more'); setMorePage('dupes'); setReturnTo('home') }}
+            openBudgets={() => { go('more'); setMorePage('budgets'); setReturnTo('home') }}
             openCategory={(categoryId, k) => { if (!categoryId) return openPending(); setFilter({ ...EMPTY_FILTER, type: k, categoryId }); go('movs') }} />}
           {tab === 'movs' && <Movs period={period} setPeriod={setPeriod} filter={filter} setFilter={setFilter} onEdit={(tx) => setSheet({ tx })} onImport={() => setImporting(true)} openPending={openPending} />}
           {tab === 'dash' && <Dashboard anchor={dashMonth} setAnchor={setDashMonth} onEdit={(tx) => setSheet({ tx })}

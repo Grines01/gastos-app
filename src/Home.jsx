@@ -6,8 +6,10 @@ import { NEUTRAL, UNCAT } from './lib/defaults.js'
 import { PeriodBar } from './PeriodBar.jsx'
 import { Donut } from './charts.jsx'
 import { Seg, Empty, Icon } from './ui.jsx'
+import { budgetRows, BudgetRow } from './Budgets.jsx'
+import { monthName, today } from './lib/format.js'
 
-export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nPending, openPending, nDupes, openDupes }) {
+export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nPending, openPending, nDupes, openDupes, openBudgets }) {
   const [sel, setSel] = useState(null)
   const rg = range(period)
   const inP = S.txs.filter((t) => inRange(t.date, rg))
@@ -27,6 +29,19 @@ export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nP
   const top = rows.slice(0, 5)
   const rest = rows.slice(5).reduce((s, r) => s + r.value, 0)
   const slices = rest > 0 ? [...top, { id: 'rest', label: 'Resto', color: NEUTRAL, value: rest }] : top
+
+  // presupuestos del mes que estás mirando (en año o período libre: el mes actual)
+  const bk = (['day', 'week', 'month'].includes(period.kind) ? period.anchor : today()).slice(0, 7)
+  const isCur = bk === today().slice(0, 7)
+  const buds = kind === 'expense' ? budgetRows(bk) : []
+  const pace = isCur ? Number(today().slice(8)) / new Date(+bk.slice(0, 4), +bk.slice(5, 7), 0).getDate() : null
+  const mName = monthName(+bk.slice(5, 7) - 1)
+  const budCard = buds.length > 0 && (
+    <section class="card home-bud">
+      <div class="card-head"><h2>Presupuestos de {mName}</h2><button class="link-btn" onClick={openBudgets}>Ver detalle</button></div>
+      <ul class="bud-list">{buds.map((r) => <BudgetRow {...r} compact pace={pace} onClick={() => openCategory(r.b.categoryId, 'expense')} />)}</ul>
+    </section>
+  )
 
   return (
     <main class="screen">
@@ -51,7 +66,8 @@ export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nP
         <Empty title={kind === 'expense' ? 'No hay gastos en este período' : 'No hay ingresos en este período'}>
           <button class="btn primary" onClick={() => onAdd(kind)}>{kind === 'expense' ? 'Cargar un gasto' : 'Cargar un ingreso'}</button>
         </Empty>
-      ) : (
+      ) : null}
+      {list.length === 0 ? budCard : (
         <>
           <Donut data={slices} selected={sel} onSelect={setSel}
             center={<><span class="dc-label">{kind === 'expense' ? 'Gastado' : 'Ingresado'}</span><span class="dc-val num">{money(total, { decimals: false })}</span><span class="dc-sub">{list.length} movimientos</span></>} />
@@ -60,6 +76,7 @@ export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nP
             <div><span>Gastos</span><b class="num">{money(exp, { decimals: false })}</b></div>
             <div><span>Balance</span><b class={`num ${inc - exp >= 0 ? 'pos' : 'neg'}`}>{money(inc - exp, { decimals: false, sign: inc - exp < 0 ? '−' : '' })}</b></div>
           </div>
+          {budCard}
           <ul class="cat-list">
             {rows.map((r) => (
               <li>

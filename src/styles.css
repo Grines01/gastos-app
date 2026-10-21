@@ -365,3 +365,8 @@ h1, h2, h3, p { margin: 0; }
 .dupe-list { list-style: none; margin: 0; padding: 0; }
 .dupe-foot { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 4px 16px 4px; }
 .dupe-banner { background: var(--accent-soft); color: var(--ink); }
+
+/* ---------- presupuestos en Inicio y en dólares ---------- */
+.home-bud { margin-top: 4px; gap: 4px; }
+.bud-row.compact { gap: 5px; padding: 8px 0; }
+.cur-mini { font-weight: 650; color: var(--ink2); background: var(--hover); border-radius: 6px; padding: 3px 7px; font-size: 14px; flex: none; }

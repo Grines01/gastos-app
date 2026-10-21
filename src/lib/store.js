@@ -22,6 +22,9 @@ export const S = { ready: false, accounts: [], categories: [], tags: [], txs: []
 const listeners = new Set()
 function emit() { S.v++; listeners.forEach((f) => f()) }
 
+// Promedio mensual del dólar elegido ({ 'YYYY-MM': cotización }), para presupuestos en USD
+export function setFx(map) { S.fx = map; emit() }
+
 export function useStore() {
   const [, set] = useState(0)
   useEffect(() => { const f = () => set((x) => x + 1); listeners.add(f); return () => listeners.delete(f) }, [])
