@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks'
 import { S, catById, accById, tagById } from './lib/store.js'
 import { range, inRange } from './lib/period.js'
-import { money, dayLabel, norm } from './lib/format.js'
+import { money, dayLabel, norm, today } from './lib/format.js'
 import { NEUTRAL } from './lib/defaults.js'
 import { PeriodBar } from './PeriodBar.jsx'
 import { Icon, Empty } from './ui.jsx'
@@ -94,7 +94,7 @@ export function TxRow({ t, onClick }) {
     <li>
       <button class={`tx-row${!isT && !c ? ' uncat' : ''}`} onClick={onClick}>
         <span class="tx-ico" style={{ '--c': isT ? NEUTRAL : c?.color || NEUTRAL }} aria-hidden="true">{isT ? '⇄' : c?.emoji || '❔'}</span>
-        <span class="tx-main"><span class="tx-title">{title}</span>{sub && <span class="tx-sub">{sub}</span>}</span>
+        <span class="tx-main"><span class="tx-title">{title}{t.date > today() && <em class="sched">Programado</em>}</span>{sub && <span class="tx-sub">{sub}</span>}</span>
         <span class="tx-amt">
           <span class={`num ${t.type === 'income' ? 'pos' : ''}`}>{money(t.amount, { sign: t.type === 'expense' ? '−' : t.type === 'income' ? '+' : '' })}</span>
           {t.currency === 'USD' && <small class="num">US$ {(t.origAmount / 100).toLocaleString('es-AR', { maximumFractionDigits: 2 })}</small>}

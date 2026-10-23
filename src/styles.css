@@ -386,3 +386,23 @@ h1, h2, h3, p { margin: 0; }
 /* ---------- Inicio en dólares ---------- */
 .unit-seg { flex: none; width: 104px; }
 .unit-note { margin: -2px 0 6px; }
+
+/* ---------- tarjetas y cuotas ---------- */
+.inst-box { padding-top: 10px; }
+.inst-toggle { padding: 0; font-weight: 600; color: var(--ink); }
+.inst-row { padding-top: 8px; }
+.inst-preview { padding-top: 8px; }
+.inst-preview b { color: var(--ink); font-weight: 650; }
+.link-btn.inline { padding: 0; font-size: 13px; }
+.card-list { list-style: none; margin: 0 0 4px; display: grid; gap: 8px; }
+.cc-row { display: grid; gap: 6px; width: 100%; text-align: left; padding: 14px; border-radius: var(--radius-m); background: var(--surface); }
+.cc-row:active { background: var(--hover); }
+.cc-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.cc-top b { font: 650 16px/1.3 var(--display); }
+.cc-top small, .cc-next { color: var(--ink2); font-size: 13px; }
+.cc-sched { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; color: var(--muted); }
+.cc-sched b { color: var(--ink); font-weight: 600; }
+.card-banner { background: var(--accent-soft); color: var(--ink); }
+.cb-line { display: block; }
+.cb-line + .cb-line { margin-top: 4px; }
+.sched { font-style: normal; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 1px 6px; margin-left: 6px; vertical-align: 1px; }

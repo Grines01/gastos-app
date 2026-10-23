@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
-import { S, saveTx, remove, defaultAccountId, saveSettings } from './lib/store.js'
-import { money, parseAmount, today, addDays } from './lib/format.js'
+import { S, saveTx, remove, defaultAccountId, saveSettings, bulkAddTxs, removeTxs, catById } from './lib/store.js'
+import { money, parseAmount, today, addDays, uid } from './lib/format.js'
+import { installmentDates, splitAmount } from './lib/cards.js'
 import { fetchRate, RATE_KINDS } from './lib/rates.js'
 import { Sheet, Seg, Icon, toast } from './ui.jsx'
 import { dupesOf } from './Dupes.jsx'
@@ -21,6 +22,9 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
   const [tagIds, setTagIds] = useState([])
   const [note, setNote] = useState('')
   const [more, setMore] = useState(false)
+  const [inst, setInst] = useState(false) // compra en cuotas
+  const [nInst, setNInst] = useState(3)
+  const [cardId, setCardId] = useState(null)
   const amountRef = useRef()
 
   // se inicializa antes de pintar: así no se ve un instante el movimiento anterior ni se pisa lo que ya escribiste
@@ -39,6 +43,8 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
     setTagIds(t.tagIds || [])
     setNote(t.note || '')
     setMore(!!(t.id && (t.note || t.tagIds?.length)))
+    setInst(false); setNInst(3)
+    setCardId(S.cards.find((c) => c.id === S.settings.lastCardId)?.id || S.cards[0]?.id || null)
     setTimeout(() => amountRef.current?.focus(), 60)
   }, [open, tx])
 
@@ -61,11 +67,41 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
   const cats = S.categories.filter((c) => c.kind === type && !c.archived)
   const accounts = S.accounts.filter((a) => !a.archived)
   const ready = valid && (editing || type === 'transfer' || !!categoryId)
+  const canInst = !editing && type === 'expense' && currency === 'ARS'
+  const useInst = canInst && inst
+  const card = S.cards.find((c) => c.id === cardId) || null
+  const instDates = useInst ? installmentDates(date, nInst, card) : []
+  const instParts = useInst && valid ? splitAmount(ars, nInst) : []
+  const siblings = editing && tx.installment ? S.txs.filter((t) => t.installment?.group === tx.installment.group) : []
+  const later = siblings.filter((t) => t.installment.k >= tx.installment.k)
+
+  async function saveInstallments(catId) {
+    const group = uid()
+    const base = note.trim() || catById(catId)?.name || 'Compra'
+    const txs = instDates.map((d, k) => ({
+      id: uid(), type: 'expense', date: d, amount: instParts[k], accountId, toAccountId: null,
+      categoryId: catId, tagIds, note: `${base} (cuota ${k + 1}/${nInst})`, currency: 'ARS', origAmount: null, rate: null,
+      source: 'manual', createdAt: Date.now() + k, updatedAt: Date.now(),
+      installment: { group, k: k + 1, n: nInst, total: ars, cardId: card?.id || null, purchase: date },
+    }))
+    await bulkAddTxs(txs)
+    saveSettings({ ...(card ? { lastCardId: card.id } : {}), ...(accountId !== S.settings.defaultAccountId ? { defaultAccountId: accountId } : {}) })
+    onClose()
+    toast(`${nInst} cuotas cargadas: la primera el ${ddmm(instDates[0])}`, { label: 'Deshacer', fn: () => removeTxs(txs.map((t) => t.id)) })
+  }
+
+  async function delLater() {
+    const copies = later.map((t) => ({ ...t }))
+    await removeTxs(later.map((t) => t.id))
+    onClose()
+    toast(later.length === 1 ? 'Cuota eliminada' : `${later.length} cuotas eliminadas`, { label: 'Deshacer', fn: () => bulkAddTxs(copies) })
+  }
 
   async function save(catId = categoryId) {
     if (!valid) { amountRef.current?.focus(); toast('Escribí un monto'); return }
     if (type === 'transfer' && (!toAccountId || toAccountId === accountId)) { toast('Elegí una cuenta de destino distinta'); return }
     if (type !== 'transfer' && !editing && !catId) { toast('Elegí una categoría'); return }
+    if (useInst) return saveInstallments(catId)
     const obj = {
       ...(tx || {}), type, date, amount: ars, accountId,
       toAccountId: type === 'transfer' ? toAccountId : null,
@@ -112,6 +148,12 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
             onInput={(e) => setAmountStr(e.currentTarget.value)} onKeyDown={(e) => { if (e.key !== 'Enter') return; if (type === 'transfer' || editing) save(); else e.currentTarget.blur() }} aria-label="Monto" />
         </div>
         {editing && tx.rawDesc && tx.rawDesc !== tx.note && <p class="fine raw-desc">Del extracto: {tx.rawDesc}</p>}
+        {editing && tx.installment && (
+          <p class="fine raw-desc">
+            Cuota {tx.installment.k} de {tx.installment.n}{S.cards.find((c) => c.id === tx.installment.cardId) ? ` · ${S.cards.find((c) => c.id === tx.installment.cardId).name}` : ''} · compra del {ddmm(tx.installment.purchase)} por {money(tx.installment.total)}.
+            {later.length > 1 && <> <button class="link-btn inline" onClick={delLater}>Eliminar esta y las {later.length - 1} siguientes</button></>}
+          </p>
+        )}
         {currency === 'USD' && (
           <div class="rate-row">
             <label>Cotización {RATE_KINDS.find((k) => k.id === (S.settings.rateKind || 'bolsa'))?.name}
@@ -132,6 +174,32 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
             </label>
           </div>
         </div>
+
+        {canInst && (
+          <div class="inst-box">
+            <label class="remember inst-toggle"><input type="checkbox" checked={inst} onChange={(e) => setInst(e.currentTarget.checked)} /> En cuotas</label>
+            {inst && (
+              <>
+                <div class="field-row two inst-row">
+                  <label class="sel"><span>Cuotas</span>
+                    <select value={nInst} onChange={(e) => setNInst(Number(e.currentTarget.value))}>{[2, 3, 4, 5, 6, 9, 10, 12, 18, 24].map((n) => <option value={n}>{n}</option>)}</select>
+                  </label>
+                  <label class="sel"><span>Tarjeta</span>
+                    <select value={cardId || ''} onChange={(e) => setCardId(e.currentTarget.value || null)}>
+                      {S.cards.map((c) => <option value={c.id}>{c.name}</option>)}
+                      <option value="">Sin tarjeta</option>
+                    </select>
+                  </label>
+                </div>
+                <p class="fine inst-preview">
+                  {valid ? <><b class="num">{nInst} cuotas de {money(instParts[0])}</b> (total {money(ars)}). </> : 'Escribí el total de la compra. '}
+                  Se cargan solas en {card ? `cada vencimiento de ${card.name}` : 'el mismo día de cada mes'}: {datesText(instDates)}.
+                  {!S.cards.length && ' Cargá tus tarjetas en Más → Tarjetas para que caigan en cada vencimiento.'}
+                </p>
+              </>
+            )}
+          </div>
+        )}
 
         <div class="field-row two">
           <label class="sel"><span>{type === 'transfer' ? 'Desde' : 'Cuenta'}</span>
@@ -171,11 +239,18 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
       <div class="sheet-foot tx-foot">
         {editing && <button class="btn ghost danger" onClick={del}><Icon name="trash" size={18} /> Eliminar</button>}
         <button class={`btn primary${ready ? '' : ' dim'}`} onClick={() => save()}>
-          {editing ? 'Guardar cambios' : `Cargar ${TYPE_LABEL[type].toLowerCase()}${valid ? ` · ${money(ars)}` : ''}`}
+          {editing ? 'Guardar cambios' : useInst ? `Cargar ${nInst} cuotas${valid ? ` · ${money(ars)}` : ''}` : `Cargar ${TYPE_LABEL[type].toLowerCase()}${valid ? ` · ${money(ars)}` : ''}`}
         </button>
       </div>
     </Sheet>
   )
+}
+
+const ddmm = (d) => `${d.slice(8)}/${d.slice(5, 7)}`
+function datesText(ds) {
+  const t = ds.map(ddmm)
+  if (t.length <= 4) return t.slice(0, -1).join(', ') + (t.length > 1 ? ' y ' : '') + t.at(-1)
+  return `${t[0]}, ${t[1]} … ${t.at(-1)}`
 }
 
 function fmtInput(cents) {

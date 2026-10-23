@@ -55,6 +55,7 @@ export function findDupes(txs, ignored = []) {
     for (let j = i + 1; j < list.length && list[j].d - a.d <= 15; j++) {
       const b = list[j]
       if (a.t.type !== b.t.type || Math.abs(a.t.amount - b.t.amount) > 500) continue
+      if (a.t.installment && a.t.installment.group === b.t.installment?.group) continue
       if (inSum.has(a.t.id) && inSum.has(b.t.id)) continue
       const sameCat = !!a.t.categoryId && a.t.categoryId === b.t.categoryId
       const word = shareWord(a.t, b.t)
@@ -66,7 +67,7 @@ export function findDupes(txs, ignored = []) {
 
   // 3) cuota cargada aparte de la compra completa (hasta 75 días antes o 10 después)
   for (const c of list) {
-    const info = cuotaInfo(c.t)
+    const info = !c.t.installment && cuotaInfo(c.t) // las cuotas generadas por la app ya saben de qué compra son
     if (!info) continue
     for (const x of list) {
       if (x === c || x.t.type !== c.t.type || cuotaInfo(x.t) || x.d - c.d > 10 || c.d - x.d > 75) continue

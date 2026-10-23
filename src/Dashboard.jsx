@@ -85,6 +85,19 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
     months.push({ label: cap(monthShort(d.getMonth())), full: `${cap(monthName(d.getMonth()))} ${d.getFullYear()}`, inc: conv(sumM(inc, k)), exp: conv(sumM(exp, k)) })
   }
 
+  // ---- próximos meses: lo programado (cuotas) + fijos como el último mes completo
+  const t0 = today()
+  const nowD = new Date(), lastFull = key(nowD.getFullYear(), nowD.getMonth() - 1)
+  const fixedEst = sumM(exp, lastFull, isFixed)
+  const restOfMonth = exp.filter((t) => t.date > t0 && t.date.startsWith(t0.slice(0, 7))).reduce((s, t) => s + t.amount, 0)
+  const ahead = [1, 2, 3, 4, 5, 6].map((i) => {
+    const d = new Date(nowD.getFullYear(), nowD.getMonth() + i, 1), k = key(d.getFullYear(), d.getMonth())
+    const sched = exp.filter((t) => t.date.startsWith(k) && !isFixed(t))
+    return { k, label: `${cap(monthShort(d.getMonth()))} ${String(d.getFullYear()).slice(2)}`, sched: sched.reduce((s, t) => s + t.amount, 0), n: sched.length }
+  })
+  const lastAhead = ahead.map((a) => a.sched > 0).lastIndexOf(true)
+  const aheadRows = ahead.slice(0, Math.max(3, lastAhead + 1))
+
   // ---- dólar: últimos 12 meses y lo que cobraste en cada uno
   const fxMonths = []
   for (let i = 11; i >= 0; i--) {
@@ -180,6 +193,20 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
           </>
         ) : <p class="fine">{S.budgets.length ? 'Ningún presupuesto empieza antes de este mes.' : 'Poné un tope por mes a las categorías que querés controlar. Lo que te sobra pasa al mes siguiente.'}</p>}
       </section>
+
+      {(aheadRows.some((a) => a.sched > 0) || fixedEst > 0) && (
+        <section class="card">
+          <h2>Próximos meses</h2>
+          {restOfMonth > 0 && <p class="fine">Este mes todavía tenés <b class="num">{money(restOfMonth)}</b> programado.</p>}
+          <div class="fx-table ahead" role="table">
+            <div class="fx-row fx-h" role="row"><span>Mes</span><span>Cuotas</span><span>Fijos aprox.</span><span>Total</span></div>
+            {aheadRows.map((a) => (
+              <div class="fx-row" role="row"><span>{a.label}</span><span class="num">{a.sched ? money(a.sched) : '—'}</span><span class="num">{money(fixedEst)}</span><b class="num">{money(a.sched + fixedEst)}</b></div>
+            ))}
+          </div>
+          <p class="fine">Cuotas: lo que ya está cargado con fecha futura. Fijos: lo que sumaron tus gastos con etiqueta Fijo el último mes completo ({cap(monthName(+lastFull.slice(5) - 1))}).</p>
+        </section>
+      )}
 
       <section class="card">
         <h2>Gasto acumulado</h2>

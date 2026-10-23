@@ -14,11 +14,12 @@ db.version(1).stores({
   meta: 'key',
 })
 db.version(2).stores({ budgets: 'id, categoryId' })
+db.version(3).stores({ cards: 'id' })
 
-const TABLES = ['accounts', 'categories', 'tags', 'txs', 'rules', 'batches', 'budgets']
+const TABLES = ['accounts', 'categories', 'tags', 'txs', 'rules', 'batches', 'budgets', 'cards']
 
 // Todo el estado vive en memoria (son pocos miles de filas); IndexedDB es la persistencia.
-export const S = { ready: false, accounts: [], categories: [], tags: [], txs: [], rules: [], batches: [], budgets: [], settings: {}, v: 0 }
+export const S = { ready: false, accounts: [], categories: [], tags: [], txs: [], rules: [], batches: [], budgets: [], cards: [], settings: {}, v: 0 }
 const listeners = new Set()
 function emit() { S.v++; listeners.forEach((f) => f()) }
 
@@ -116,6 +117,13 @@ export async function bulkAddTxs(txs, batch) {
   sortAll(); emit()
 }
 
+export async function removeTxs(ids) {
+  const set = new Set(ids)
+  await db.txs.bulkDelete(ids)
+  S.txs = S.txs.filter((t) => !set.has(t.id))
+  emit()
+}
+
 export async function undoBatch(batchId) {
   const ids = S.txs.filter((t) => t.batchId === batchId).map((t) => t.id)
   await db.transaction('rw', db.txs, db.batches, async () => {
@@ -156,9 +164,12 @@ export const catById = (id) => S.categories.find((c) => c.id === id)
 export const accById = (id) => S.accounts.find((a) => a.id === id)
 export const tagById = (id) => S.tags.find((t) => t.id === id)
 
+// Saldo a hoy: las cuotas programadas a futuro todavía no salieron de la cuenta
 export function balances() {
   const b = Object.fromEntries(S.accounts.map((a) => [a.id, a.initial || 0]))
+  const t0 = today()
   for (const t of S.txs) {
+    if (t.date > t0) continue
     if (t.type === 'expense') b[t.accountId] = (b[t.accountId] || 0) - t.amount
     else if (t.type === 'income') b[t.accountId] = (b[t.accountId] || 0) + t.amount
     else if (t.type === 'transfer') {
