@@ -80,6 +80,54 @@ export function Bars({ data, series }) {
     </div>
   )
 }
+// ---------- Barras apiladas (cuotas por tarjeta y por mes) ----------
+// Una barra por mes; cada tramo es una serie, en el orden fijo de `series`. 2px de separación entre tramos.
+export function StackBars({ data, series, fmt = (v) => money(v, { decimals: false }) }) {
+  const [hi, setHi] = useState(null)
+  const W = 340, Hh = 170, padL = 46, padB = 22, padT = 10
+  const tot = (d) => series.reduce((s, x) => s + (d[x.key] || 0), 0)
+  const nice = niceMax(Math.max(1, ...data.map(tot)))
+  const plotW = W - padL - 4, plotH = Hh - padB - padT
+  const gw = plotW / data.length, bw = Math.min(26, gw * 0.62)
+  const h = (v) => (v / nice) * plotH
+  return (
+    <div class="chart">
+      <svg viewBox={`0 0 ${W} ${Hh}`} role="img" aria-label="Cuotas por mes y tarjeta">
+        {[0, nice / 2, nice].map((t) => { const yy = padT + plotH - h(t); return <g><line x1={padL} x2={W} y1={yy} y2={yy} stroke="var(--grid)" /><text x={padL - 6} y={yy + 4} class="tick" text-anchor="end">{compactMoney(t).replace('$ ', '')}</text></g> })}
+        {data.map((d, i) => {
+          const x = padL + i * gw + (gw - bw) / 2
+          let base = padT + plotH
+          const segs = series.filter((sr) => d[sr.key] > 0)
+          return (
+            <g class="hit" onClick={() => setHi(hi === i ? null : i)}>
+              <rect x={padL + i * gw} y={padT} width={gw} height={plotH + padB} fill="transparent" />
+              {hi === i && <rect x={padL + i * gw + 1} y={padT} width={gw - 2} height={plotH} fill="var(--hover)" rx="4" />}
+              {segs.map((sr, k) => {
+                const hh = h(d[sr.key]); const top = base - hh; const last = k === segs.length - 1
+                const gap = k > 0 ? 2 : 0 // separación del color de fondo entre tramos
+                const el = last
+                  ? <path d={roundTop(x, top, bw, Math.max(0, hh - gap), Math.min(4, Math.max(0, hh - gap) / 2))} fill={sr.color} />
+                  : <rect x={x} y={top} width={bw} height={Math.max(0, hh - gap)} fill={sr.color} />
+                base = top
+                return el
+              })}
+              <text x={padL + i * gw + gw / 2} y={Hh - 6} class="tick" text-anchor="middle">{d.label}</text>
+            </g>
+          )
+        })}
+        <line x1={padL} x2={W} y1={padT + plotH} y2={padT + plotH} stroke="var(--axis)" />
+      </svg>
+      {hi !== null && (
+        <div class="tip">
+          <strong>{data[hi].full}</strong>
+          {series.filter((sr) => data[hi][sr.key] > 0).map((sr) => <span><i style={{ background: sr.color }} />{sr.label}: <b class="num">{fmt(data[hi][sr.key])}</b></span>)}
+          <span class="tip-wide">Total en cuotas: <b class="num">{fmt(tot(data[hi]))}</b></span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function roundTop(x, y, w, h, r) {
   return `M${x} ${y + h}V${y + r}Q${x} ${y} ${x + r} ${y}H${x + w - r}Q${x + w} ${y} ${x + w} ${y + r}V${y + h}Z`
 }

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'preact/hooks'
 import { S, tagById, balances, catById } from './lib/store.js'
 import { money as money0, today, monthName, monthShort, pad, shortDate } from './lib/format.js'
 import { getSeries, monthlyAvg, RATE_KINDS } from './lib/rates.js'
-import { Bars, Lines, HBars, Legend } from './charts.jsx'
+import { Bars, Lines, HBars, Legend, StackBars } from './charts.jsx'
 import { Icon, Seg } from './ui.jsx'
 import { budgetRows, BudgetRow } from './Budgets.jsx'
 
@@ -96,6 +96,30 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
     return { k, label: `${cap(monthShort(d.getMonth()))} ${String(d.getFullYear()).slice(2)}`, sched: sched.reduce((s, t) => s + t.amount, 0), n: sched.length }
   })
   const lastAhead = ahead.map((a) => a.sched > 0).lastIndexOf(true)
+
+  // ---- cuotas por tarjeta: desde hoy hasta la última cuota (mín. 6 meses, máx. 12)
+  const futureInst = exp.filter((t) => t.installment && t.date > t0)
+  const instSeries = [
+    ...S.cards.map((c, i) => ({ key: c.id, label: c.name, color: `var(--cc-${Math.min(i, 3) + 1})` })),
+    { key: 'none', label: 'Sin tarjeta', color: 'var(--cc-none)' },
+  ].filter((sr) => futureInst.some((t) => (t.installment.cardId || 'none') === sr.key || (sr.key !== 'none' && t.installment.cardId === sr.key)))
+  const lastInst = futureInst.reduce((m, t) => (t.date > m ? t.date : m), t0)
+  const nInstMonths = Math.min(12, Math.max(6, (+lastInst.slice(0, 4) - nowD.getFullYear()) * 12 + (+lastInst.slice(5, 7) - 1 - nowD.getMonth()) + 1))
+  const instMonths = Array.from({ length: nInstMonths }, (_, i) => {
+    const d = new Date(nowD.getFullYear(), nowD.getMonth() + i, 1), k = key(d.getFullYear(), d.getMonth())
+    const row = { label: cap(monthShort(d.getMonth())), full: `${cap(monthName(d.getMonth()))} ${d.getFullYear()}${i === 0 ? ' (lo que falta)' : ''}` }
+    for (const t of futureInst) if (t.date.startsWith(k)) { const kk = t.installment.cardId && S.cards.some((c) => c.id === t.installment.cardId) ? t.installment.cardId : 'none'; row[kk] = (row[kk] || 0) + t.amount }
+    return row
+  })
+  // compras con cuotas por pagar
+  const groups = new Map()
+  for (const t of exp) if (t.installment) { const g = groups.get(t.installment.group) || []; g.push(t); groups.set(t.installment.group, g) }
+  const activeInst = [...groups.values()].map((g) => {
+    const left = g.filter((t) => t.date > t0).sort((a, b) => (a.date < b.date ? -1 : 1))
+    if (!left.length) return null
+    const i0 = g[0].installment
+    return { name: (g[0].note || '').replace(/\s*\(cuota \d+\/\d+\)$/, ''), card: S.cards.find((c) => c.id === i0.cardId)?.name || 'Sin tarjeta', left: left.length, n: i0.n, each: left[0].amount, rest: left.reduce((s, t) => s + t.amount, 0), last: left.at(-1).date }
+  }).filter(Boolean).sort((a, b) => (a.last < b.last ? -1 : 1))
   const aheadRows = ahead.slice(0, Math.max(3, lastAhead + 1))
 
   // ---- dólar: últimos 12 meses y lo que cobraste en cada uno
@@ -197,6 +221,19 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
       {(aheadRows.some((a) => a.sched > 0) || fixedEst > 0) && (
         <section class="card">
           <h2>Próximos meses</h2>
+          {futureInst.length > 0 && (
+            <>
+              <h3 class="sub-h">Cuotas por pagar</h3>
+              <Legend items={instSeries.map((sr) => ({ label: sr.label, color: sr.color }))} />
+              <StackBars data={instMonths} series={instSeries} fmt={(v) => money(v)} />
+              <ul class="inst-list">
+                {activeInst.map((a) => (
+                  <li><span>{a.name}<small>{a.card} · quedan {a.left} de {a.n} · hasta {cap(monthShort(+a.last.slice(5, 7) - 1))} {a.last.slice(2, 4)}</small></span><span class="inst-amt"><b class="num">{money(a.each)}</b><small>/mes · resta {money(a.rest)}</small></span></li>
+                ))}
+              </ul>
+              <h3 class="sub-h">Mes a mes, con tus fijos</h3>
+            </>
+          )}
           {restOfMonth > 0 && <p class="fine">Este mes todavía tenés <b class="num">{money(restOfMonth)}</b> programado.</p>}
           <div class="fx-table ahead" role="table">
             <div class="fx-row fx-h" role="row"><span>Mes</span><span>Cuotas</span><span>Fijos aprox.</span><span>Total</span></div>

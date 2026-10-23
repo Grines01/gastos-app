@@ -406,3 +406,13 @@ h1, h2, h3, p { margin: 0; }
 .cb-line { display: block; }
 .cb-line + .cb-line { margin-top: 4px; }
 .sched { font-style: normal; font-size: 11px; font-weight: 600; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 1px 6px; margin-left: 6px; vertical-align: 1px; }
+
+/* ---------- cuotas por tarjeta (paleta categórica validada, orden fijo) ---------- */
+:root { --cc-1: #2a78d6; --cc-2: #eb6834; --cc-3: #1baf7a; --cc-4: #eda100; --cc-none: #a9a79f; }
+@media (prefers-color-scheme: dark) { :root { --cc-1: #3987e5; --cc-2: #d95926; --cc-3: #199e70; --cc-4: #c98500; --cc-none: #7f8781; } }
+.inst-list { list-style: none; margin: 4px 0 6px; padding: 0; }
+.inst-list li { display: flex; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; }
+.inst-list li:last-child { border-bottom: 0; }
+.inst-list li > span:first-child { display: grid; min-width: 0; }
+.inst-list small { color: var(--muted); font-size: 12.5px; }
+.inst-amt { display: grid; justify-items: end; text-align: right; white-space: nowrap; }
