@@ -29,9 +29,9 @@ export function App() {
   const [returnTo, setReturnTo] = useState(null) // pestaña a la que vuelve "atrás" (p. ej. de Movimientos a Resumen)
 
   useEffect(() => { load() }, [])
-  // promedio mensual del dólar (para presupuestos en USD); queda guardado en el teléfono
+  // promedio mensual del dólar elegido (Inicio en dólares y presupuestos en USD); queda guardado en el teléfono
   const rateKind = S.settings.rateKind || 'bolsa'
-  useEffect(() => { if (!S.ready || !S.budgets.some((b) => b.currency === 'USD')) return; let alive = true; getSeries(rateKind).then((s) => alive && s && setFx(monthlyAvg(s))); return () => { alive = false } }, [S.ready, rateKind, S.budgets.filter((b) => b.currency === 'USD').length])
+  useEffect(() => { if (!S.ready) return; let alive = true; getSeries(rateKind).then((s) => alive && s && setFx(monthlyAvg(s))); return () => { alive = false } }, [S.ready, rateKind])
   // botón "Instalar app" (Chrome en Android ofrece el evento beforeinstallprompt)
   const [installEvt, setInstallEvt] = useState(null)
   useEffect(() => {

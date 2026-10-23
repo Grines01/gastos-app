@@ -90,3 +90,19 @@ export const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Math.random(
 export function norm(s) {
   return String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim()
 }
+
+// Dólares (centavos de USD): "US$ 1.234"
+export function usdMoney(cents, { sign = '' } = {}) {
+  return `${sign}US$ ${fmt0.format(Math.round(Math.abs(cents) / 100))}`
+}
+
+// Monto de un movimiento en centavos de USD: si se cargó en dólares, el monto original;
+// si no, pesos ÷ dólar promedio de ese mes (o el último mes anterior con dato). null si no hay cotización.
+export function toUsd(t, fx) {
+  if (t.currency === 'USD' && t.origAmount) return t.origAmount
+  if (!fx) return null
+  const k = t.date.slice(0, 7)
+  let r = fx[k]
+  if (!r) { const prev = Object.keys(fx).filter((m) => m <= k).sort().at(-1); r = prev ? fx[prev] : Object.values(fx)[0] }
+  return r ? t.amount / r : null
+}

@@ -382,3 +382,7 @@ h1, h2, h3, p { margin: 0; }
 .fx-row:last-child > * { border-bottom: 0; }
 .fx-row > :not(:first-child) { text-align: right; }
 .fx-h > * { color: var(--muted); font-size: 12.5px; padding-top: 0; }
+
+/* ---------- Inicio en dólares ---------- */
+.unit-seg { flex: none; width: 104px; }
+.unit-note { margin: -2px 0 6px; }

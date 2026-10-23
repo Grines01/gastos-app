@@ -2,7 +2,7 @@ import { useState, useRef } from 'preact/hooks'
 import { money, compactMoney } from './lib/format.js'
 
 // ---------- Torta (dona) ----------
-export function Donut({ data, total, selected, onSelect, center }) {
+export function Donut({ data, total, selected, onSelect, center, fmt = (v) => money(v, { decimals: false }) }) {
   const size = 200, r = 84, w = 26, cx = size / 2, cy = size / 2
   let acc = 0
   const sum = data.reduce((s, d) => s + d.value, 0) || 1
@@ -26,14 +26,14 @@ export function Donut({ data, total, selected, onSelect, center }) {
           <path d={path(a.a0, a.a1)} fill="none" stroke={a.color} stroke-width={a.id === selected ? w + 8 : w}
             class="donut-arc" opacity={selected && a.id !== selected ? 0.35 : 1}
             onClick={() => onSelect?.(a.id === selected ? null : a.id)}>
-            <title>{`${a.label}: ${money(a.value)}`}</title>
+            <title>{`${a.label}: ${fmt(a.value)}`}</title>
           </path>
         ))}
         {/* separadores de 2px del color de superficie */}
         {arcs.length > 1 && arcs.map((a) => { const [x0, y0] = pt(a.a0, r - w / 2 - 6), [x1, y1] = pt(a.a0, r + w / 2 + 6); return <line x1={x0} y1={y0} x2={x1} y2={y1} stroke="var(--bg)" stroke-width="2" pointer-events="none" /> })}
       </svg>
       <div class="donut-center" aria-live="polite">
-        {sel ? (<><span class="dc-label">{sel.label}</span><span class="dc-val num">{money(sel.value, { decimals: false })}</span><span class="dc-sub">{Math.round((sel.value / sum) * 100)}%</span></>)
+        {sel ? (<><span class="dc-label">{sel.label}</span><span class="dc-val num">{fmt(sel.value)}</span><span class="dc-sub">{Math.round((sel.value / sum) * 100)}%</span></>)
           : center}
       </div>
     </div>

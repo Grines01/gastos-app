@@ -1,7 +1,8 @@
 import { useState } from 'preact/hooks'
-import { S, catById } from './lib/store.js'
+import { S, catById, saveSettings } from './lib/store.js'
 import { range, inRange } from './lib/period.js'
-import { money } from './lib/format.js'
+import { money as ars, usdMoney, toUsd } from './lib/format.js'
+import { RATE_KINDS } from './lib/rates.js'
 import { NEUTRAL, UNCAT } from './lib/defaults.js'
 import { PeriodBar } from './PeriodBar.jsx'
 import { Donut } from './charts.jsx'
@@ -11,13 +12,19 @@ export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nP
   const [sel, setSel] = useState(null)
   const rg = range(period)
   const inP = S.txs.filter((t) => inRange(t.date, rg))
-  const exp = inP.filter((t) => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
-  const inc = inP.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+  // pesos o dólares: lo cargado en USD va con su monto exacto; el resto, al dólar promedio de su mes
+  const wantUsd = S.settings.homeUnit === 'USD'
+  const usd = wantUsd && !!S.fx
+  const val = usd ? (t) => toUsd(t, S.fx) || 0 : (t) => t.amount
+  const money = usd ? (c, o = {}) => usdMoney(c, o) : ars
+  const rateName = RATE_KINDS.find((k) => k.id === (S.settings.rateKind || 'bolsa'))?.name
+  const exp = inP.filter((t) => t.type === 'expense').reduce((s, t) => s + val(t), 0)
+  const inc = inP.filter((t) => t.type === 'income').reduce((s, t) => s + val(t), 0)
   const list = inP.filter((t) => t.type === kind)
   const total = kind === 'expense' ? exp : inc
 
   const by = new Map()
-  for (const t of list) by.set(t.categoryId || null, (by.get(t.categoryId || null) || 0) + t.amount)
+  for (const t of list) by.set(t.categoryId || null, (by.get(t.categoryId || null) || 0) + val(t))
   const rows = [...by.entries()].map(([id, value]) => {
     const c = id ? catById(id) : null
     return { id: id || 'none', catId: id, label: c?.name || 'Sin categoría', emoji: c?.emoji || '❔', color: c?.color || UNCAT, value, count: list.filter((t) => (t.categoryId || null) === id).length }
@@ -32,7 +39,9 @@ export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nP
     <main class="screen">
       <header class="top">
         <Seg value={kind} onChange={(v) => { setKind(v); setSel(null) }} options={[{ value: 'expense', label: 'Gastos' }, { value: 'income', label: 'Ingresos' }]} />
+        <div class="unit-seg"><Seg small value={wantUsd ? 'USD' : 'ARS'} onChange={(v) => saveSettings({ homeUnit: v })} options={[{ value: 'ARS', label: '$' }, { value: 'USD', label: 'US$' }]} /></div>
       </header>
+      {wantUsd && !S.fx && <p class="notice">Sin cotizaciones guardadas todavía: se muestra en pesos. Abrí la app con internet una vez.</p>}
       {nPending > 0 && (
         <button class="pending-banner" onClick={openPending}>
           <span><b>{nPending === 1 ? '1 movimiento sin categoría' : `${nPending} movimientos sin categoría`}</b>. Tocá para categorizarlos.</span>
@@ -53,13 +62,14 @@ export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nP
         </Empty>
       ) : (
         <>
-          <Donut data={slices} selected={sel} onSelect={setSel}
+          <Donut data={slices} selected={sel} onSelect={setSel} fmt={(v) => money(v, { decimals: false })}
             center={<><span class="dc-label">{kind === 'expense' ? 'Gastado' : 'Ingresado'}</span><span class="dc-val num">{money(total, { decimals: false })}</span><span class="dc-sub">{list.length} movimientos</span></>} />
           <div class="stats3">
             <div><span>Ingresos</span><b class="num pos">{money(inc, { decimals: false })}</b></div>
             <div><span>Gastos</span><b class="num">{money(exp, { decimals: false })}</b></div>
             <div><span>Balance</span><b class={`num ${inc - exp >= 0 ? 'pos' : 'neg'}`}>{money(inc - exp, { decimals: false, sign: inc - exp < 0 ? '−' : '' })}</b></div>
           </div>
+          {usd && <p class="fine pad-x unit-note">En dólares: lo que cargaste en USD va con su monto exacto; el resto, al dólar {rateName} promedio de cada mes.</p>}
           <ul class="cat-list">
             {rows.map((r) => (
               <li>
