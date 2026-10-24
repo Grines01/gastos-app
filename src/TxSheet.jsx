@@ -33,7 +33,7 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
     const t = tx || {}
     setType(t.type || initialType)
     setCurrency(t.currency || 'ARS')
-    setAmountStr(t.id ? fmtInput(t.currency === 'USD' ? t.origAmount : t.amount) : '')
+    setAmountStr(t.id || t.amount ? fmtInput(t.currency === 'USD' ? t.origAmount : t.amount) : '') // también si viene precargado ("Ya lo pagué")
     setRateStr(t.rate ? String(t.rate).replace('.', ',') : '')
     setRateState('idle')
     setDate(t.date || today())

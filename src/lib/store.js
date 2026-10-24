@@ -15,11 +15,12 @@ db.version(1).stores({
 })
 db.version(2).stores({ budgets: 'id, categoryId' })
 db.version(3).stores({ cards: 'id' })
+db.version(4).stores({ recurring: 'id' })
 
-const TABLES = ['accounts', 'categories', 'tags', 'txs', 'rules', 'batches', 'budgets', 'cards']
+const TABLES = ['accounts', 'categories', 'tags', 'txs', 'rules', 'batches', 'budgets', 'cards', 'recurring']
 
 // Todo el estado vive en memoria (son pocos miles de filas); IndexedDB es la persistencia.
-export const S = { ready: false, accounts: [], categories: [], tags: [], txs: [], rules: [], batches: [], budgets: [], cards: [], settings: {}, v: 0 }
+export const S = { ready: false, accounts: [], categories: [], tags: [], txs: [], rules: [], batches: [], budgets: [], cards: [], recurring: [], settings: {}, v: 0 }
 const listeners = new Set()
 function emit() { S.v++; listeners.forEach((f) => f()) }
 

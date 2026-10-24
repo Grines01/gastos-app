@@ -416,3 +416,26 @@ h1, h2, h3, p { margin: 0; }
 .inst-list li > span:first-child { display: grid; min-width: 0; }
 .inst-list small { color: var(--muted); font-size: 12.5px; }
 .inst-amt { display: grid; justify-items: end; text-align: right; white-space: nowrap; }
+
+/* ---------- pagos futuros ---------- */
+.fut-tiles { grid-template-columns: 1fr 1fr; padding-top: 4px; }
+.fut-list, .fut-check { list-style: none; margin: 0; padding: 0; }
+.fut-list li, .fut-check li { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); font-size: 14.5px; }
+.fut-list li:last-child, .fut-check li:last-child { border-bottom: 0; }
+.fut-date { display: grid; justify-items: center; width: 36px; flex: none; line-height: 1.1; }
+.fut-date b { font: 650 17px/1.1 var(--display); }
+.fut-date small { font-size: 11.5px; color: var(--muted); }
+.fut-main { flex: 1; display: grid; min-width: 0; }
+.fut-main small { color: var(--muted); font-size: 12.5px; }
+.fut-main > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fut-amt { display: grid; justify-items: end; gap: 2px; white-space: nowrap; }
+.fut-due .fut-main > span { font-weight: 600; }
+.late .fut-main small { color: var(--warn-ink); }
+.fc-mark { width: 22px; text-align: center; color: var(--muted); font-weight: 700; flex: none; }
+.fut-check li.ok .fc-mark { color: var(--pos); }
+.fut-check li.ok .fut-main > span { color: var(--ink2); }
+.rec-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; }
+.sugg-btns { display: flex; gap: 6px; flex: none; }
+.fut-link { display: flex; align-items: center; gap: 10px; width: calc(100% - 32px); margin: 4px 16px 8px; padding: 11px 14px; border-radius: var(--radius-m); background: var(--surface); text-align: left; font-size: 14px; color: var(--ink2); }
+.fut-link span { flex: 1; }
+.fut-link b { color: var(--ink); font-weight: 650; }

@@ -82,7 +82,7 @@ export function Bars({ data, series }) {
 }
 // ---------- Barras apiladas (cuotas por tarjeta y por mes) ----------
 // Una barra por mes; cada tramo es una serie, en el orden fijo de `series`. 2px de separación entre tramos.
-export function StackBars({ data, series, fmt = (v) => money(v, { decimals: false }) }) {
+export function StackBars({ data, series, fmt = (v) => money(v, { decimals: false }), totalLabel = "Total" }) {
   const [hi, setHi] = useState(null)
   const W = 340, Hh = 170, padL = 46, padB = 22, padT = 10
   const tot = (d) => series.reduce((s, x) => s + (d[x.key] || 0), 0)
@@ -121,7 +121,7 @@ export function StackBars({ data, series, fmt = (v) => money(v, { decimals: fals
         <div class="tip">
           <strong>{data[hi].full}</strong>
           {series.filter((sr) => data[hi][sr.key] > 0).map((sr) => <span><i style={{ background: sr.color }} />{sr.label}: <b class="num">{fmt(data[hi][sr.key])}</b></span>)}
-          <span class="tip-wide">Total en cuotas: <b class="num">{fmt(tot(data[hi]))}</b></span>
+          <span class="tip-wide">{totalLabel}: <b class="num">{fmt(tot(data[hi]))}</b></span>
         </div>
       )}
     </div>

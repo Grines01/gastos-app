@@ -225,7 +225,7 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
             <>
               <h3 class="sub-h">Cuotas por pagar</h3>
               <Legend items={instSeries.map((sr) => ({ label: sr.label, color: sr.color }))} />
-              <StackBars data={instMonths} series={instSeries} fmt={(v) => money(v)} />
+              <StackBars data={instMonths} series={instSeries} fmt={(v) => money(v)} totalLabel="Total en cuotas" />
               <ul class="inst-list">
                 {activeInst.map((a) => (
                   <li><span>{a.name}<small>{a.card} · quedan {a.left} de {a.n} · hasta {cap(monthShort(+a.last.slice(5, 7) - 1))} {a.last.slice(2, 4)}</small></span><span class="inst-amt"><b class="num">{money(a.each)}</b><small>/mes · resta {money(a.rest)}</small></span></li>

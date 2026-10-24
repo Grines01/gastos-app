@@ -12,6 +12,7 @@ import { Pending } from './Pending.jsx'
 import { isPending } from './lib/store.js'
 import { dupeGroups } from './Dupes.jsx'
 import { askReminderCheck, cardAlerts } from './Cards.jsx'
+import { pendingThisMonth } from './Future.jsx'
 import { Icon, Toaster } from './ui.jsx'
 
 const EMPTY_FILTER = { type: 'all', categoryId: null, accountId: null, tagId: null, q: '' }
@@ -92,6 +93,7 @@ export function App() {
           {tab === 'home' && <Home period={period} setPeriod={setPeriod} kind={kind} setKind={setKind} onAdd={(type) => setSheet({ type })} nPending={nPending} openPending={openPending}
             nDupes={nDupes} openDupes={() => { go('more'); setMorePage('dupes'); setReturnTo('home') }}
             alerts={cardAlerts()} openCards={() => { go('more'); setMorePage('cards'); setReturnTo('home') }}
+            future={S.recurring.length || S.txs.some((t) => t.installment) ? pendingThisMonth() : null} openFuture={() => { go('more'); setMorePage('future'); setReturnTo('home') }}
             openCategory={(categoryId, k) => { if (!categoryId) return openPending(); setFilter({ ...EMPTY_FILTER, type: k, categoryId }); go('movs') }} />}
           {tab === 'movs' && <Movs period={period} setPeriod={setPeriod} filter={filter} setFilter={setFilter} onEdit={(tx) => setSheet({ tx })} onImport={() => setImporting(true)} openPending={openPending} />}
           {tab === 'dash' && <Dashboard anchor={dashMonth} setAnchor={setDashMonth} onEdit={(tx) => setSheet({ tx })}
