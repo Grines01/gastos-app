@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks'
 import { S, put, remove, saveSettings, catById, defaultAccountId, today } from './lib/store.js'
 import { money as money0, parseAmount, monthName, monthShort } from './lib/format.js'
-import { occurrences, expectedAmount, findPayment, suggest, dateIn } from './lib/recurring.js'
+import { occurrences, expectedAmount, findPayment, suggest, dateIn, words } from './lib/recurring.js'
 import { nextDates } from './lib/cards.js'
 import { StackBars, Legend } from './charts.jsx'
 import { Icon, Seg, Sheet, toast, confirmDialog } from './ui.jsx'
@@ -33,6 +33,86 @@ export function pendingThisMonth() {
   return { total: rec.reduce((s, x) => s + x.amount, 0) + inst.reduce((s, t) => s + t.amount, 0), n: rec.length + inst.length }
 }
 
+// ---------- Proyección única (Resumen y Pagos futuros usan la misma) ----------
+// Por mes: cuotas por tarjeta + pagos automáticos + otros fijos (estimado).
+// "Otros fijos" = gastos con etiqueta Fijo del último mes completo que no son cuotas ni pagos automáticos
+// (gimnasio, expensas, inglés…). Así nada se cuenta dos veces.
+const isFijo = (t) => (t.tagIds || []).some((id) => S.tags.find((x) => x.id === id)?.name.toLowerCase() === 'fijo')
+const isAuto = (t) => !!t.recurringId || S.recurring.some((r) => r.key && words(t).includes(r.key))
+export function projection(nMonths = 6) {
+  const t0 = today(), y = +t0.slice(0, 4), m = +t0.slice(5, 7)
+  const exp = S.txs.filter((t) => t.type === 'expense')
+  const last = dateIn(y, m - 1, 1).slice(0, 7)
+  const otherFixed = (k) => exp.filter((t) => t.date.startsWith(k) && isFijo(t) && !t.installment && !isAuto(t))
+  const otrosEst = otherFixed(last).reduce((s, t) => s + t.amount, 0)
+  const otrosPaidNow = otherFixed(t0.slice(0, 7)).filter((t) => t.date <= t0).reduce((s, t) => s + t.amount, 0)
+  const cards = S.cards.filter((c) => exp.some((t) => t.installment?.cardId === c.id && t.date > t0))
+  const noCard = exp.some((t) => t.installment && t.date > t0 && !S.cards.some((c) => c.id === t.installment.cardId))
+  const series = [
+    ...cards.map((c, i) => ({ key: c.id, short: c.name, label: `Cuotas ${c.name}`, color: `var(--cc-${Math.min(i, 2) + 1})` })),
+    ...(noCard ? [{ key: 'none', short: 'Sin tarjeta', label: 'Cuotas sin tarjeta', color: 'var(--cc-4)' }] : []),
+    { key: 'auto', short: 'Automáticos', label: 'Pagos automáticos', color: 'var(--cc-auto)' },
+    { key: 'otros', short: 'Otros fijos', label: 'Otros fijos (estimado)', color: 'var(--cc-none)' },
+  ]
+  const rows = Array.from({ length: nMonths }, (_, i) => {
+    const from = dateIn(y, m + i, 1), to = dateIn(y, m + i, 31), d = new Date(y, m - 1 + i, 1)
+    const row = { k: from.slice(0, 7), label: cap(monthShort(d.getMonth())), full: `${cap(monthName(d.getMonth()))} ${d.getFullYear()}${i === 0 ? ' (lo que falta)' : ''}` }
+    for (const t of exp) if (t.installment && t.date > t0 && t.date >= from && t.date <= to) { const kk = S.cards.some((c) => c.id === t.installment.cardId) ? t.installment.cardId : 'none'; row[kk] = (row[kk] || 0) + t.amount }
+    row.auto = recurringItems(from, to).filter((x) => !x.paid && (i > 0 || x.date >= t0.slice(0, 8) + '01')).reduce((s, x) => s + x.amount, 0)
+    row.otros = i === 0 ? Math.max(0, otrosEst - otrosPaidNow) : otrosEst
+    row.cuotas = series.filter((sr) => sr.key !== 'auto' && sr.key !== 'otros').reduce((s, sr) => s + (row[sr.key] || 0), 0)
+    row.total = row.cuotas + row.auto + row.otros
+    return row
+  })
+  return { rows, series: series.filter((sr) => rows.some((r) => r[sr.key] > 0)), lastLabel: cap(monthName(+last.slice(5, 7) - 1)) }
+}
+
+// Compras en cuotas con cuotas por pagar
+export function activeInstallments() {
+  const t0 = today(), groups = new Map()
+  for (const t of S.txs) if (t.installment) { const g = groups.get(t.installment.group) || []; g.push(t); groups.set(t.installment.group, g) }
+  return [...groups.values()].map((g) => {
+    const left = g.filter((t) => t.date > t0).sort((a, b) => (a.date < b.date ? -1 : 1))
+    if (!left.length) return null
+    const i0 = g[0].installment
+    return { name: (g[0].note || '').replace(/\s*\(cuota \d+\/\d+\)$/, ''), card: S.cards.find((c) => c.id === i0.cardId)?.name || 'Sin tarjeta', paid: i0.n - left.length, n: i0.n, each: left[0].amount, rest: left.reduce((s, t) => s + t.amount, 0), last: left.at(-1).date }
+  }).filter(Boolean).sort((a, b) => (a.last < b.last ? -1 : 1))
+}
+
+// Tarjeta de proyección (gráfico + cuotas activas + tabla plegable), compartida
+export function ProjectionCard({ onOpen, months = 6 }) {
+  const { rows, series, lastLabel } = projection(months)
+  const inst = activeInstallments()
+  const next = rows[1]
+  if (!rows.some((r) => r.total > 0)) return null
+  return (
+    <section class="card proj">
+      <div class="card-head"><h2>Próximos meses</h2>{onOpen && <button class="link-btn" onClick={onOpen}>Ver detalle</button>}</div>
+      <p class="proj-head">{next.full}: <b class="num">{money(next.total)}</b> comprometido{next.cuotas && next.cuotas !== next.total ? <>, <span class="num">{money(next.cuotas)}</span> en cuotas</> : null}</p>
+      <Legend items={series.map((sr) => ({ label: sr.short, color: sr.color }))} />
+      <StackBars data={rows} series={series} fmt={(v) => money(v)} />
+      {inst.length > 0 && (
+        <>
+          <h3 class="sub-h">Cuotas activas</h3>
+          <ul class="inst-list compact">
+            {inst.map((a) => (
+              <li><span>{a.name}<small>{a.card} · {a.paid}/{a.n} pagadas · termina en {monthShort(+a.last.slice(5, 7) - 1)}</small></span><b class="num">{money(a.each)}</b></li>
+            ))}
+          </ul>
+        </>
+      )}
+      <details class="proj-table">
+        <summary>Ver en tabla</summary>
+        <div class="fx-table" role="table">
+          <div class="fx-row fx-h" role="row"><span>Mes</span><span>Cuotas</span><span>Fijos</span><span>Total</span></div>
+          {rows.map((r) => <div class="fx-row" role="row"><span>{r.label} {r.k.slice(2, 4)}</span><span class="num">{r.cuotas ? money(r.cuotas) : '—'}</span><span class="num">{money(r.auto + r.otros)}</span><b class="num">{money(r.total)}</b></div>)}
+        </div>
+        <p class="fine">Fijos = pagos automáticos + otros gastos con etiqueta Fijo (estimados con {lastLabel}). El mes actual muestra solo lo que falta.</p>
+      </details>
+    </section>
+  )
+}
+
 export function FuturePage({ onConfirm }) {
   const [edit, setEdit] = useState(null)
   const t0 = today()
@@ -52,19 +132,6 @@ export function FuturePage({ onConfirm }) {
     ...S.txs.filter((t) => t.installment && t.date > t0 && t.date <= in30).map((t) => ({ kind: 'inst', date: t.date, name: t.note, sub: S.cards.find((c) => c.id === t.installment.cardId)?.name || 'Sin tarjeta', amount: t.amount })),
     ...S.cards.flatMap((c) => { const d = nextDates(c, t0).due; return d <= in30 ? [{ kind: 'due', date: d, name: `Vence ${c.name}`, sub: 'Resumen de la tarjeta', amount: null }] : [] }),
   ].sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.kind === 'due' ? 1 : -1))
-
-  // --- proyección: 6 meses desde este
-  const SERIES = [{ key: 'inst', label: 'Cuotas', color: 'var(--cc-1)' }, { key: 'rec', label: 'Suscripciones y débitos', color: 'var(--cc-2)' }]
-  const proj = Array.from({ length: 6 }, (_, i) => {
-    const from = dateIn(y, m + i, 1), to = dateIn(y, m + i, 31)
-    const d = new Date(y, m - 1 + i, 1)
-    const rec = recurringItems(from, to).filter((x) => i > 0 || !x.paid)
-    return {
-      label: cap(monthShort(d.getMonth())), full: `${cap(monthName(d.getMonth()))} ${d.getFullYear()}${i === 0 ? ' (lo que falta)' : ''}`,
-      inst: S.txs.filter((t) => t.installment && t.date > t0 && t.date >= from && t.date <= to).reduce((s, t) => s + t.amount, 0),
-      rec: rec.reduce((s, x) => s + x.amount, 0),
-    }
-  })
 
   const sugg = suggest(S.txs, S.recurring, S.settings.recDismissed || [], t0).slice(0, 8)
   const dismiss = (k) => saveSettings({ recDismissed: [...(S.settings.recDismissed || []), k] })
@@ -113,12 +180,7 @@ export function FuturePage({ onConfirm }) {
         <p class="fine">Se marca solo cuando cargás o importás el cobro (por el nombre y un monto parecido). "Ya lo pagué" lo carga con el monto sugerido, que podés corregir.</p>
       </section>
 
-      <section class="card">
-        <h2>Próximos 6 meses</h2>
-        <Legend items={SERIES} />
-        <StackBars data={proj} series={SERIES} fmt={(v) => money(v)} />
-        <p class="fine">Cuotas ya cargadas más tus pagos automáticos estimados. Los que son en dólares, al dólar promedio del último mes.</p>
-      </section>
+      <ProjectionCard />
 
       <section class="card">
         <div class="card-head"><h2>Tus pagos automáticos</h2><button class="link-btn" onClick={() => setEdit(blank())}>Agregar</button></div>

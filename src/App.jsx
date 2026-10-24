@@ -99,6 +99,7 @@ export function App() {
           {tab === 'dash' && <Dashboard anchor={dashMonth} setAnchor={setDashMonth} onEdit={(tx) => setSheet({ tx })}
             openAccounts={() => { fromDash('more'); setMorePage('accounts') }}
             openBudgets={() => { fromDash('more'); setMorePage('budgets') }}
+            openFuture={() => { fromDash('more'); setMorePage('future') }}
             openCategory={(categoryId, month) => {
               setPeriod({ kind: 'month', anchor: `${month}-01` })
               if (!categoryId) return openPending()

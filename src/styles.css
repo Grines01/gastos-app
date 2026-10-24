@@ -439,3 +439,17 @@ h1, h2, h3, p { margin: 0; }
 .fut-link { display: flex; align-items: center; gap: 10px; width: calc(100% - 32px); margin: 4px 16px 8px; padding: 11px 14px; border-radius: var(--radius-m); background: var(--surface); text-align: left; font-size: 14px; color: var(--ink2); }
 .fut-link span { flex: 1; }
 .fut-link b { color: var(--ink); font-weight: 650; }
+
+/* ---------- proyección (Resumen y Pagos futuros) ---------- */
+:root { --cc-auto: #6250d6; }
+@media (prefers-color-scheme: dark) { :root { --cc-auto: #9085e9; } }
+.proj-head { font-size: 14.5px; color: var(--ink2); }
+.proj-head b { color: var(--ink); font-weight: 650; font-size: 16px; }
+.inst-list.compact li { align-items: center; }
+.proj-table summary { cursor: pointer; color: var(--accent); font-weight: 600; font-size: 14px; padding: 4px 0; list-style: none; }
+.proj-table summary::-webkit-details-marker { display: none; }
+.proj-table summary::after { content: ' ▾'; }
+.proj-table[open] summary::after { content: ' ▴'; }
+.proj-table .fx-table { margin-top: 6px; }
+.proj-head .num, .inst-list b.num { white-space: nowrap; }
+.legend { flex-wrap: wrap; row-gap: 4px; }
