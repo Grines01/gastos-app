@@ -453,3 +453,25 @@ h1, h2, h3, p { margin: 0; }
 .proj-table .fx-table { margin-top: 6px; }
 .proj-head .num, .inst-list b.num { white-space: nowrap; }
 .legend { flex-wrap: wrap; row-gap: 4px; }
+
+/* proyección: colores tocables y hoja de detalle */
+.legend-btn { display: inline-flex; align-items: center; font: inherit; color: var(--ink2); padding: 6px 10px 6px 8px; margin: -2px 0; border-radius: 999px; background: var(--bg); }
+.legend-btn:active { background: var(--hover); }
+.legend-btn i { margin-right: 6px; }
+.legend:has(.legend-btn) { gap: 6px; }
+.chart .seg { cursor: pointer; }
+.tip-row { display: inline-flex; align-items: center; width: 100%; font: inherit; color: inherit; text-align: left; padding: 4px 0; }
+.tip-row b { margin-left: 4px; }
+.tip-go { margin-left: auto; color: var(--muted); font-size: 18px; line-height: 1; padding-left: 8px; }
+.proj-hint { margin: 2px 0 6px; }
+.det { padding: 0 16px 16px; }
+.det-head { font-size: 15px; color: var(--ink2); }
+.det-head i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 8px; }
+.det-head b { color: var(--ink); font-size: 17px; }
+.det-list { list-style: none; margin: 4px 0 8px; padding: 0; }
+.det-list li > * { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 11px 0; border-bottom: 1px solid var(--line); font: inherit; color: inherit; font-size: 14.5px; }
+.det-list li:last-child > * { border-bottom: 0; }
+.det-list li > * > span { display: grid; flex: 1; min-width: 0; }
+.det-list small { color: var(--muted); font-size: 12.5px; }
+.det-list b.num { white-space: nowrap; }
+.det-list button:active { background: var(--hover); }

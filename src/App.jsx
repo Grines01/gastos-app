@@ -13,7 +13,7 @@ import { isPending } from './lib/store.js'
 import { dupeGroups } from './Dupes.jsx'
 import { askReminderCheck, cardAlerts } from './Cards.jsx'
 import { pendingThisMonth } from './Future.jsx'
-import { Icon, Toaster } from './ui.jsx'
+import { Icon, Toaster, openSheets } from './ui.jsx'
 
 const EMPTY_FILTER = { type: 'all', categoryId: null, accountId: null, tagId: null, q: '' }
 
@@ -60,6 +60,7 @@ export function App() {
       const n = nav.current
       trap.current = false
       if (n.sheet) setSheet(null)
+      else if (openSheets.length) { openSheets.at(-1).close(); history.pushState({ trap: true }, ''); trap.current = true }
       else if (n.importing) setImporting(false)
       else if (n.pending) setPending(false)
       else if (n.morePage && !n.returnTo) setMorePage(null)

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks'
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks'
 
 const P = {
   home: 'M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
@@ -37,7 +37,17 @@ export function Seg({ options, value, onChange, small }) {
   )
 }
 
+// Hojas abiertas dentro de una pantalla: el botón atrás del teléfono cierra la de arriba (ver App)
+export const openSheets = []
 export function Sheet({ open, onClose, children, title, full }) {
+  const closeRef = useRef(onClose)
+  closeRef.current = onClose
+  useLayoutEffect(() => { // al instante, para que un "atrás" inmediato ya la encuentre
+    if (!open) return
+    const e = { close: () => closeRef.current() }
+    openSheets.push(e)
+    return () => { const i = openSheets.indexOf(e); if (i >= 0) openSheets.splice(i, 1) }
+  }, [open])
   useEffect(() => {
     if (!open) return
     const onKey = (e) => e.key === 'Escape' && onClose()

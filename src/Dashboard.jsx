@@ -182,7 +182,7 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
         ) : <p class="fine">{S.budgets.length ? 'Ningún presupuesto empieza antes de este mes.' : 'Poné un tope por mes a las categorías que querés controlar. Lo que te sobra pasa al mes siguiente.'}</p>}
       </section>
 
-      <ProjectionCard onOpen={openFuture} />
+      <ProjectionCard onOpen={openFuture} onEdit={onEdit} />
 
       <section class="card">
         <h2>Gasto acumulado</h2>

@@ -79,18 +79,76 @@ export function activeInstallments() {
   }).filter(Boolean).sort((a, b) => (a.last < b.last ? -1 : 1))
 }
 
-// Tarjeta de proyección (gráfico + cuotas activas + tabla plegable), compartida
-export function ProjectionCard({ onOpen, months = 6 }) {
+// Qué compone cada color de la proyección en un mes (para la hoja de detalle)
+export function seriesDetail(key, k) {
+  const t0 = today(), y = +k.slice(0, 4), m = +k.slice(5, 7)
+  const from = dateIn(y, m, 1), to = dateIn(y, m, 31), cur = k === t0.slice(0, 7)
+  const exp = S.txs.filter((t) => t.type === 'expense')
+  if (key === 'auto') {
+    return {
+      items: recurringItems(from, to).filter((x) => !x.paid).map((x) => ({ name: x.r.name, sub: `${x.date < t0 ? 'Tocaba' : 'Toca'} el ${ddmm(x.date)} · ${methodText(x.r)}`, amount: x.amount })),
+      note: cur ? 'Solo los que todavía no figuran pagados este mes.' : 'Suscripciones y débitos automáticos que cargaste en Pagos futuros.',
+    }
+  }
+  if (key === 'otros') {
+    const lastK = dateIn(+t0.slice(0, 4), +t0.slice(5, 7) - 1, 1).slice(0, 7)
+    const items = exp.filter((t) => t.date.startsWith(lastK) && isFijo(t) && !t.installment && !isAuto(t)).sort((a, b) => b.amount - a.amount)
+      .map((t) => ({ name: t.note || catById(t.categoryId)?.name || 'Sin categoría', sub: `${ddmm(t.date)} · ${catById(t.categoryId)?.name || 'Sin categoría'}`, amount: t.amount, tx: t }))
+    const paidNow = cur ? exp.filter((t) => t.date.startsWith(k) && t.date <= t0 && isFijo(t) && !t.installment && !isAuto(t)).reduce((s, t) => s + t.amount, 0) : 0
+    const lm = monthName(+lastK.slice(5, 7) - 1)
+    return { items, note: `Estimado con los gastos con etiqueta Fijo de ${lm} (sin cuotas ni pagos automáticos).${paidNow ? ` Este mes ya pagaste ${money(paidNow)} de esto.` : ''}`, listTitle: `Fijos de ${lm}` }
+  }
+  const inCard = (t) => (key === 'none' ? !S.cards.some((c) => c.id === t.installment.cardId) : t.installment.cardId === key)
+  return {
+    items: exp.filter((t) => t.installment && t.date > t0 && t.date >= from && t.date <= to && inCard(t)).sort((a, b) => (a.date < b.date ? -1 : 1))
+      .map((t) => ({ name: (t.note || '').replace(/\s*\(cuota \d+\/\d+\)$/, '') || 'Compra en cuotas', sub: `Cuota ${t.installment.k}/${t.installment.n} · vence el ${ddmm(t.date)}`, amount: t.amount, tx: t })),
+  }
+}
+
+function DetailSheet({ pick, rows, series, onClose, onEdit, onOpen }) {
+  if (!pick) return null
+  const sr = series.find((x) => x.key === pick.key), row = rows.find((r) => r.k === pick.k)
+  if (!sr || !row) return null
+  const d = seriesDetail(pick.key, pick.k)
+  const go = (fn) => { onClose(); fn() }
+  return (
+    <Sheet open title={sr.label.replace(' (estimado)', '')} onClose={onClose}>
+      <div class="det">
+        <p class="det-head"><i style={{ background: sr.color }} />{row.full}: <b class="num">{money(row[pick.key] || 0)}</b></p>
+        {d.listTitle && <h3 class="sub-h">{d.listTitle}</h3>}
+        {d.items.length === 0 ? <p class="fine">Nada para este mes.</p> : (
+          <ul class="det-list">
+            {d.items.map((it) => {
+              const body = <><span>{it.name}<small>{it.sub}</small></span><b class="num">{money(it.amount)}</b></>
+              return <li>{it.tx && onEdit ? <button onClick={() => go(() => onEdit(it.tx))}>{body}<Icon name="right" size={16} /></button> : <div>{body}</div>}</li>
+            })}
+          </ul>
+        )}
+        {d.note && <p class="fine">{d.note}</p>}
+        {pick.key === 'auto' && onOpen && <button class="btn ghost wide" onClick={() => go(onOpen)}>Ver pagos automáticos</button>}
+      </div>
+    </Sheet>
+  )
+}
+
+// Tarjeta de proyección (gráfico + cuotas activas + tabla plegable), compartida.
+// Tocar un color (en el gráfico, la leyenda o el globo) abre qué lo compone.
+export function ProjectionCard({ onOpen, onEdit, months = 6 }) {
+  const [pick, setPick] = useState(null)
+  const [sel, setSel] = useState(null)
   const { rows, series, lastLabel } = projection(months)
   const inst = activeInstallments()
   const next = rows[1]
   if (!rows.some((r) => r.total > 0)) return null
+  // desde la leyenda: el mes elegido en el gráfico o, si no hay, el próximo mes que tenga ese color
+  const fromLegend = (key) => { const r = (sel != null && rows[sel][key] > 0 ? rows[sel] : null) || rows.slice(1).find((x) => x[key] > 0) || rows[0]; setPick({ key, k: r.k }) }
   return (
     <section class="card proj">
       <div class="card-head"><h2>Próximos meses</h2>{onOpen && <button class="link-btn" onClick={onOpen}>Ver detalle</button>}</div>
       <p class="proj-head">{next.full}: <b class="num">{money(next.total)}</b> comprometido{next.cuotas && next.cuotas !== next.total ? <>, <span class="num">{money(next.cuotas)}</span> en cuotas</> : null}</p>
-      <Legend items={series.map((sr) => ({ label: sr.short, color: sr.color }))} />
-      <StackBars data={rows} series={series} fmt={(v) => money(v)} />
+      <Legend items={series.map((sr) => ({ label: sr.short, color: sr.color, onClick: () => fromLegend(sr.key) }))} />
+      <StackBars data={rows} series={series} fmt={(v) => money(v)} onSel={setSel} onPick={(key, i) => setPick({ key, k: rows[i].k })} />
+      <p class="fine proj-hint">Tocá un color para ver qué incluye.</p>
       {inst.length > 0 && (
         <>
           <h3 class="sub-h">Cuotas activas</h3>
@@ -109,6 +167,7 @@ export function ProjectionCard({ onOpen, months = 6 }) {
         </div>
         <p class="fine">Fijos = pagos automáticos + otros gastos con etiqueta Fijo (estimados con {lastLabel}). El mes actual muestra solo lo que falta.</p>
       </details>
+      <DetailSheet pick={pick} rows={rows} series={series} onClose={() => setPick(null)} onEdit={onEdit} onOpen={onOpen} />
     </section>
   )
 }
@@ -180,7 +239,7 @@ export function FuturePage({ onConfirm }) {
         <p class="fine">Se marca solo cuando cargás o importás el cobro (por el nombre y un monto parecido). "Ya lo pagué" lo carga con el monto sugerido, que podés corregir.</p>
       </section>
 
-      <ProjectionCard />
+      <ProjectionCard onEdit={onConfirm} />
 
       <section class="card">
         <div class="card-head"><h2>Tus pagos automáticos</h2><button class="link-btn" onClick={() => setEdit(blank())}>Agregar</button></div>

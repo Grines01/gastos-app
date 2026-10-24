@@ -82,8 +82,10 @@ export function Bars({ data, series }) {
 }
 // ---------- Barras apiladas (cuotas por tarjeta y por mes) ----------
 // Una barra por mes; cada tramo es una serie, en el orden fijo de `series`. 2px de separación entre tramos.
-export function StackBars({ data, series, fmt = (v) => money(v, { decimals: false }), totalLabel = "Total" }) {
-  const [hi, setHi] = useState(null)
+// opcionales: onPick(serie, i) hace tocables los tramos y las filas del globo; onSel(i) avisa qué mes está elegido
+export function StackBars({ data, series, fmt = (v) => money(v, { decimals: false }), totalLabel = "Total", onPick, onSel }) {
+  const [hi, setHi0] = useState(null)
+  const setHi = (i) => { setHi0(i); onSel?.(i) }
   const W = 340, Hh = 170, padL = 46, padB = 22, padT = 10
   const tot = (d) => series.reduce((s, x) => s + (d[x.key] || 0), 0)
   const nice = niceMax(Math.max(1, ...data.map(tot)))
@@ -105,9 +107,12 @@ export function StackBars({ data, series, fmt = (v) => money(v, { decimals: fals
               {segs.map((sr, k) => {
                 const hh = h(d[sr.key]); const top = base - hh; const last = k === segs.length - 1
                 const gap = k > 0 ? 2 : 0 // separación del color de fondo entre tramos
+                // con onPick, tocar el tramo abre su detalle (el área tocable es todo el ancho de la columna)
+                const pick = onPick && ((e) => { e.stopPropagation(); setHi(i); onPick(sr.key, i) })
                 const el = last
                   ? <path d={roundTop(x, top, bw, Math.max(0, hh - gap), Math.min(4, Math.max(0, hh - gap) / 2))} fill={sr.color} />
                   : <rect x={x} y={top} width={bw} height={Math.max(0, hh - gap)} fill={sr.color} />
+                if (pick) { base = top; return <g class="seg" data-key={sr.key} onClick={pick}><rect x={padL + i * gw} y={top} width={gw} height={hh} fill="transparent" />{el}</g> }
                 base = top
                 return el
               })}
@@ -120,7 +125,9 @@ export function StackBars({ data, series, fmt = (v) => money(v, { decimals: fals
       {hi !== null && (
         <div class="tip">
           <strong>{data[hi].full}</strong>
-          {series.filter((sr) => data[hi][sr.key] > 0).map((sr) => <span><i style={{ background: sr.color }} />{sr.label}: <b class="num">{fmt(data[hi][sr.key])}</b></span>)}
+          {series.filter((sr) => data[hi][sr.key] > 0).map((sr) => onPick
+            ? <button class="tip-row" onClick={() => onPick(sr.key, hi)}><i style={{ background: sr.color }} />{sr.label}: <b class="num">{fmt(data[hi][sr.key])}</b><span class="tip-go" aria-hidden="true">›</span></button>
+            : <span><i style={{ background: sr.color }} />{sr.label}: <b class="num">{fmt(data[hi][sr.key])}</b></span>)}
           <span class="tip-wide">{totalLabel}: <b class="num">{fmt(tot(data[hi]))}</b></span>
         </div>
       )}
@@ -201,5 +208,6 @@ export function HBars({ rows, color }) {
 }
 
 export function Legend({ items }) {
-  return <div class="legend">{items.map((s) => <span><i class={s.dashed ? 'dash' : ''} style={{ background: s.dashed ? 'none' : s.color, borderColor: s.color }} />{s.label}</span>)}</div>
+  const dot = (s) => <i class={s.dashed ? 'dash' : ''} style={{ background: s.dashed ? 'none' : s.color, borderColor: s.color }} />
+  return <div class="legend">{items.map((s) => s.onClick ? <button class="legend-btn" onClick={s.onClick}>{dot(s)}{s.label}</button> : <span>{dot(s)}{s.label}</span>)}</div>
 }
