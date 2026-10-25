@@ -5,6 +5,7 @@ import { installmentDates, splitAmount } from './lib/cards.js'
 import { fetchRate, RATE_KINDS } from './lib/rates.js'
 import { Sheet, Seg, Icon, toast } from './ui.jsx'
 import { dupesOf } from './Dupes.jsx'
+import { shares, knownNames, cleanName, norm, owedOf } from './lib/split.js'
 
 const TYPE_LABEL = { expense: 'Gasto', income: 'Ingreso', transfer: 'Transferencia' }
 
@@ -25,6 +26,10 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
   const [inst, setInst] = useState(false) // compra en cuotas
   const [nInst, setNInst] = useState(3)
   const [cardId, setCardId] = useState(null)
+  const [shared, setShared] = useState(false) // gasto compartido
+  const [names, setNames] = useState([])
+  const [nameStr, setNameStr] = useState('')
+  const [me, setMe] = useState(true)
   const amountRef = useRef()
 
   // se inicializa antes de pintar: así no se ve un instante el movimiento anterior ni se pisa lo que ya escribiste
@@ -44,6 +49,7 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
     setNote(t.note || '')
     setMore(!!(t.id && (t.note || t.tagIds?.length)))
     setInst(false); setNInst(3)
+    setShared(!!t.split); setNames((t.split?.people || []).map((p) => p.name)); setNameStr(''); setMe(t.split?.me ?? true)
     setCardId(S.cards.find((c) => c.id === S.settings.lastCardId)?.id || S.cards[0]?.id || null)
     setTimeout(() => amountRef.current?.focus(), 60)
   }, [open, tx])
@@ -74,6 +80,14 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
   const instParts = useInst && valid ? splitAmount(ars, nInst) : []
   const siblings = editing && tx.installment ? S.txs.filter((t) => t.installment?.group === tx.installment.group) : []
   const later = siblings.filter((t) => t.installment.k >= tx.installment.k)
+  const canShare = type === 'expense' && !useInst
+  const useShare = canShare && shared
+  const pendingName = cleanName(nameStr)
+  const allNames = pendingName && !names.some((n) => norm(n) === norm(pendingName)) ? [...names, pendingName] : names
+  const sh = useShare && valid ? shares(ars, allNames, me) : { mine: 0, each: [] }
+  const owed = sh.each.reduce((a, b) => a + b, 0)
+  const addName = (v = nameStr) => { const n = cleanName(v); if (n && !names.some((x) => norm(x) === norm(n))) setNames([...names, n]); setNameStr('') }
+  const prevPerson = (name) => tx?.split?.people?.find((p) => norm(p.name) === norm(name))
 
   async function saveInstallments(catId) {
     const group = uid()
@@ -102,19 +116,23 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
     if (type === 'transfer' && (!toAccountId || toAccountId === accountId)) { toast('Elegí una cuenta de destino distinta'); return }
     if (type !== 'transfer' && !editing && !catId) { toast('Elegí una categoría'); return }
     if (useInst) return saveInstallments(catId)
+    if (useShare && !allNames.length) { toast('Escribí con quién lo compartiste'); return }
     const obj = {
       ...(tx || {}), type, date, amount: ars, accountId,
       toAccountId: type === 'transfer' ? toAccountId : null,
       categoryId: type === 'transfer' ? null : catId, tagIds, note: note.trim(),
       currency, origAmount: currency === 'USD' ? Math.abs(raw) : null, rate: currency === 'USD' ? rate : null,
       source: tx?.source || 'manual',
+      split: useShare ? { me, people: allNames.map((name, i) => ({ ...(prevPerson(name) || {}), name, amount: sh.each[i] })) } : undefined,
     }
+    if (!obj.split) delete obj.split
     const saved = await saveTx(obj)
     if (accountId !== S.settings.defaultAccountId) saveSettings({ defaultAccountId: accountId })
     onClose()
     const other = !editing && dupesOf(saved.id)[0]?.txs.find((t) => t.id !== saved.id)
     if (editing) toast('Cambios guardados')
     else if (other) toast(`¿Repetido? Ya hay ${money(other.amount, { decimals: false })} el ${other.date.slice(8)}/${other.date.slice(5, 7)}${other.note ? ` (${other.note.slice(0, 24)})` : ''}`, { label: 'Deshacer', fn: () => remove('txs', saved.id) })
+    else if (saved.split) toast(`Gasto compartido guardado · te deben ${money(owedOf(saved), { decimals: false })}`, { label: 'Deshacer', fn: () => remove('txs', saved.id) })
     else toast(`${TYPE_LABEL[type]} guardado`, { label: 'Deshacer', fn: () => remove('txs', saved.id) })
   }
 
@@ -175,7 +193,7 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
           </div>
         </div>
 
-        {canInst && (
+        {canInst && !useShare && (
           <div class="inst-box">
             <label class="remember inst-toggle"><input type="checkbox" checked={inst} onChange={(e) => setInst(e.currentTarget.checked)} /> En cuotas</label>
             {inst && (
@@ -195,6 +213,35 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
                   {valid ? <><b class="num">{nInst} cuotas de {money(instParts[0])}</b> (total {money(ars)}). </> : 'Escribí el total de la compra. '}
                   Se cargan solas en {card ? `cada vencimiento de ${card.name}` : 'el mismo día de cada mes'}: {datesText(instDates)}.
                   {!S.cards.length && ' Cargá tus tarjetas en Más → Tarjetas para que caigan en cada vencimiento.'}
+                </p>
+              </>
+            )}
+          </div>
+        )}
+
+        {canShare && (
+          <div class="inst-box share-box">
+            <label class="remember share-toggle"><input type="checkbox" checked={shared} onChange={(e) => setShared(e.currentTarget.checked)} /> Compartido (pagué yo y me deben)</label>
+            {shared && (
+              <>
+                <div class="name-chips">
+                  {names.map((n) => {
+                    const p = prevPerson(n)
+                    return <span class={`chip on name-chip${p?.paidId ? ' paid' : ''}`}>{n}{p?.paidId ? ' ✓' : ''}<button aria-label={`Quitar ${n}`} onClick={() => setNames(names.filter((x) => x !== n))}>×</button></span>
+                  })}
+                  <input class="name-input" placeholder={names.length ? 'Otro nombre' : 'Nombre (ej: Leo)'} value={nameStr} enterkeyhint="next" aria-label="Nombre"
+                    onInput={(e) => { const v = e.currentTarget.value; if (v.endsWith(',')) addName(v.slice(0, -1)); else setNameStr(v) }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addName() } }} />
+                  {nameStr.trim() && <button class="chip add-name" onClick={() => addName()}>Agregar</button>}
+                </div>
+                {(() => { const sug = knownNames().filter((n) => !names.some((x) => norm(x) === norm(n)) && (!nameStr || norm(n).startsWith(norm(nameStr)))).slice(0, 8); return sug.length > 0 && (
+                  <div class="chips wrap name-sugg">{sug.map((n) => <button class="chip" onClick={() => addName(n)}>+ {n}</button>)}</div>
+                ) })()}
+                <label class="remember me-toggle"><input type="checkbox" checked={me} onChange={(e) => setMe(e.currentTarget.checked)} /> Yo también participo</label>
+                <p class="fine inst-preview">
+                  {!allNames.length ? 'Agregá a las personas con las que dividiste la cuenta.'
+                    : !valid ? `Escribí el total que pagaste: se divide entre ${allNames.length + (me ? 1 : 0)}.`
+                    : <><b class="num">{money(sh.each[0])} cada uno</b> ({allNames.length + (me ? 1 : 0)} personas){me ? <>, tu parte {money(sh.mine)}</> : null}. Te deben <b class="num">{money(owed)}</b>; te aviso en 2 días si no te pagaron.</>}
                 </p>
               </>
             )}

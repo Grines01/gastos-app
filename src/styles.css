@@ -475,3 +475,31 @@ h1, h2, h3, p { margin: 0; }
 .det-list small { color: var(--muted); font-size: 12.5px; }
 .det-list b.num { white-space: nowrap; }
 .det-list button:active { background: var(--hover); }
+
+/* gastos compartidos */
+.share-box .name-chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 4px; }
+.name-chip { display: inline-flex; align-items: center; gap: 2px; padding-right: 4px; }
+.name-chip button { font: inherit; color: inherit; opacity: .7; padding: 0 6px; font-size: 17px; line-height: 1; }
+.name-chip.paid { opacity: .75; }
+.name-input { flex: 1; min-width: 120px; font: inherit; font-size: 15px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.name-sugg { margin: 4px 0; }
+.me-toggle { margin-top: 4px; }
+.split-card { padding-top: 8px; }
+.split-head { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 6px 0 10px; font: inherit; color: inherit; border-bottom: 1px solid var(--line); }
+.split-head > span { display: grid; flex: 1; min-width: 0; }
+.split-head small, .sp-name small { color: var(--muted); font-size: 12.5px; font-weight: 400; }
+.split-people { list-style: none; margin: 0; padding: 0; }
+.split-people li { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.split-people li:last-child { border-bottom: 0; }
+.sp-row { display: flex; align-items: center; gap: 12px; }
+.sp-name { display: grid; flex: 1; min-width: 0; font-weight: 600; }
+.sp-row b.num { white-space: nowrap; }
+.split-people li.sp-done .sp-name, .split-people li.sp-done b.num { color: var(--muted); }
+.sp-ok { min-width: 44px; min-height: 36px; color: var(--pos, #1baf7a); font-size: 18px; font-weight: 700; }
+.sp-match { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-top: 6px; padding: 8px 10px; border-radius: 10px; background: var(--bg); font-size: 13.5px; color: var(--ink2); }
+.sp-waive { font: inherit; color: var(--accent); padding: 6px 2px; margin: -6px 0; }
+.split-closed { text-align: left; }
+.split-closed summary { text-align: left; }
+.split-foot { margin: 6px 0 0; }
+.split-closed { margin: 8px 0 16px; }
+.split-closed[open] summary { margin-bottom: 8px; }

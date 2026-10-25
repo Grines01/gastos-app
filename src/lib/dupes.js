@@ -56,6 +56,7 @@ export function findDupes(txs, ignored = []) {
       const b = list[j]
       if (a.t.type !== b.t.type || Math.abs(a.t.amount - b.t.amount) > 500) continue
       if (a.t.installment && a.t.installment.group === b.t.installment?.group) continue
+      if (a.t.splitOf && a.t.splitOf === b.t.splitOf) continue // reintegros de una misma cuenta compartida
       if (inSum.has(a.t.id) && inSum.has(b.t.id)) continue
       const sameCat = !!a.t.categoryId && a.t.categoryId === b.t.categoryId
       const word = shareWord(a.t, b.t)

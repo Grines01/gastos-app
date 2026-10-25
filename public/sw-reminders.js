@@ -1,4 +1,5 @@
-// Recordatorios de tarjetas: avisa 2 días antes (y el mismo día) del cierre y del vencimiento.
+// Recordatorios: tarjetas (2 días antes y el mismo día del cierre y del vencimiento)
+// y gastos compartidos (a los 2 y a los 7 días, si alguien todavía no te pagó).
 // Corre dentro del service worker: Android lo despierta con "periodicsync" aunque la app esté cerrada,
 // y la app también lo pide cada vez que se abre. Cada aviso se manda una sola vez.
 /* global self, clients, indexedDB */
@@ -22,32 +23,47 @@ function req(store, mode, fn) {
   return new Promise((res, rej) => { const q = fn(store); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error) })
 }
 
+const addDays = (s, n) => { const [y, m, d] = parts(s); const x = new Date(Date.UTC(y, m, d + n)); return x.toISOString().slice(0, 10) }
+const namesText = (ns) => (ns.length <= 1 ? ns.join('') : `${ns.slice(0, -1).join(', ')} y ${ns.at(-1)}`)
+
 async function checkReminders() {
   const db = await openDb()
   try {
-    if (!db.objectStoreNames.contains('cards')) return
-    const tx = db.transaction(['cards', 'meta', 'txs'], 'readonly')
-    const cards = await req(tx.objectStore('cards'), 'r', (s) => s.getAll())
+    const stores = ['meta', 'txs', ...(db.objectStoreNames.contains('cards') ? ['cards'] : [])]
+    const tx = db.transaction(stores, 'readonly')
     const settings = (await req(tx.objectStore('meta'), 'r', (s) => s.get('settings')))?.value || {}
     const sent = (await req(tx.objectStore('meta'), 'r', (s) => s.get('notified')))?.value || {}
-    if (!settings.notify || !cards.length) return
+    if (!settings.notify) return
+    const cards = stores.includes('cards') ? await req(tx.objectStore('cards'), 'r', (s) => s.getAll()) : []
     const today = todayIso()
-    const events = []
+    const txs = await req(tx.objectStore('txs'), 'r', (s) => s.index('date').getAll(IDBKeyRange.lowerBound(addDays(today, -60)))).catch(() => [])
+    const out = []
+    // tarjetas
     for (const c of cards) {
       for (const [kind, date] of [['cierra', onOrAfter(today, c.closeDay)], ['vence', onOrAfter(today, c.dueDay)]]) {
-        const n = between(today, date)
-        if (n >= 0 && n <= DAYS && !sent[`${c.id}|${kind}|${date}`]) events.push({ c, kind, date, n })
+        const n = between(today, date), key = `${c.id}|${kind}|${date}`
+        if (n < 0 || n > DAYS || sent[key]) continue
+        const cuotas = kind === 'vence' ? txs.filter((t) => t.installment?.cardId === c.id && t.date === date).reduce((s, t) => s + t.amount, 0) : 0
+        out.push({ keys: [key], title: c.name, body: kind === 'cierra'
+          ? `Cierra ${when(n)} (${ddmm(date)}). Lo que compres después entra en el próximo resumen.`
+          : `Vence ${when(n)} (${ddmm(date)}).${cuotas ? ` Cuotas programadas: ${money(cuotas)}.` : ''}` })
       }
     }
-    if (!events.length) return
-    const txs = await new Promise((res) => { const q = db.transaction('txs').objectStore('txs').index('date').getAll(IDBKeyRange.lowerBound(today)); q.onsuccess = () => res(q.result); q.onerror = () => res([]) })
-    for (const e of events) {
-      const cuotas = e.kind === 'vence' ? txs.filter((t) => t.installment?.cardId === e.c.id && t.date === e.date).reduce((s, t) => s + t.amount, 0) : 0
-      const body = e.kind === 'cierra'
-        ? `Cierra ${when(e.n)} (${ddmm(e.date)}). Lo que compres después entra en el próximo resumen.`
-        : `Vence ${when(e.n)} (${ddmm(e.date)}).${cuotas ? ` Cuotas programadas: ${money(cuotas)}.` : ''}`
-      await self.registration.showNotification(e.c.name, { body, tag: `${e.c.id}|${e.kind}|${e.date}`, icon: 'icon-192.png', badge: 'icon-192.png', data: { url: './' } })
-      sent[`${e.c.id}|${e.kind}|${e.date}`] = Date.now()
+    // gastos compartidos: ¿te pagaron?
+    for (const t of txs) {
+      const open = (t.type === 'expense' && t.split?.people || []).filter((p) => !p.paidId && !p.waived)
+      if (!open.length || t.date > today) continue
+      const age = between(t.date, today)
+      const due = [2, 7].filter((d) => age >= d)
+      if (!due.length || sent[`split|${t.id}|${due.at(-1)}`]) continue
+      const names = open.map((p) => p.name), owed = open.reduce((s, p) => s + p.amount, 0)
+      out.push({ keys: due.map((d) => `split|${t.id}|${d}`), title: '¿Te pagaron?', page: 'debts',
+        body: `${namesText(names)} te ${names.length > 1 ? 'deben' : 'debe'} ${money(owed)} de ${t.note ? `"${t.note}"` : 'un gasto compartido'} (${ddmm(t.date)}).` })
+    }
+    if (!out.length) return
+    for (const e of out) {
+      await self.registration.showNotification(e.title, { body: e.body, tag: e.keys.at(-1), icon: 'icon-192.png', badge: 'icon-192.png', data: { url: './', page: e.page || null } })
+      for (const k of e.keys) sent[k] = Date.now()
     }
     // se guardan los avisos mandados (los de más de 60 días se olvidan)
     for (const k of Object.keys(sent)) if (Date.now() - sent[k] > 60 * 86400000) delete sent[k]
@@ -59,5 +75,9 @@ self.addEventListener('periodicsync', (e) => { if (e.tag === 'card-reminders') e
 self.addEventListener('message', (e) => { if (e.data?.type === 'check-reminders') e.waitUntil(checkReminders().catch(() => {})) })
 self.addEventListener('notificationclick', (e) => {
   e.notification.close()
-  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then((ws) => (ws[0] ? ws[0].focus() : clients.openWindow('./'))))
+  const page = e.notification.data?.page
+  e.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then((ws) => {
+    if (ws[0]) { if (page) ws[0].postMessage({ type: 'open', page }); return ws[0].focus() }
+    return clients.openWindow(page === 'debts' ? './#te-deben' : './')
+  }))
 })

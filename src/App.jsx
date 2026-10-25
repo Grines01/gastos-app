@@ -13,6 +13,7 @@ import { isPending } from './lib/store.js'
 import { dupeGroups } from './Dupes.jsx'
 import { askReminderCheck, cardAlerts } from './Cards.jsx'
 import { pendingThisMonth } from './Future.jsx'
+import { owedSummary } from './lib/split.js'
 import { Icon, Toaster, openSheets } from './ui.jsx'
 
 const EMPTY_FILTER = { type: 'all', categoryId: null, accountId: null, tagId: null, q: '' }
@@ -35,6 +36,15 @@ export function App() {
   const rateKind = S.settings.rateKind || 'bolsa'
   // al abrir la app, que el service worker revise si hay que avisar de un cierre o vencimiento
   useEffect(() => { if (S.ready) askReminderCheck() }, [S.ready])
+  // tocar el aviso "¿Te pagaron?" abre Te deben (con la app cerrada llega como #te-deben; abierta, como mensaje)
+  const openDebts = (from = 'home') => { setSheet(null); setImporting(false); setPending(false); setTab('more'); setMorePage('debts'); setReturnTo(from); window.scrollTo(0, 0) }
+  useEffect(() => {
+    if (!S.ready) return
+    if (location.hash === '#te-deben') { history.replaceState(null, '', location.pathname + location.search); openDebts() }
+    const onMsg = (e) => { if (e.data?.type === 'open' && e.data.page === 'debts') openDebts() }
+    navigator.serviceWorker?.addEventListener('message', onMsg)
+    return () => navigator.serviceWorker?.removeEventListener('message', onMsg)
+  }, [S.ready])
   useEffect(() => { if (!S.ready) return; let alive = true; getSeries(rateKind).then((s) => alive && s && setFx(monthlyAvg(s))); return () => { alive = false } }, [S.ready, rateKind])
   // botón "Instalar app" (Chrome en Android ofrece el evento beforeinstallprompt)
   const [installEvt, setInstallEvt] = useState(null)
@@ -94,6 +104,7 @@ export function App() {
           {tab === 'home' && <Home period={period} setPeriod={setPeriod} kind={kind} setKind={setKind} onAdd={(type) => setSheet({ type })} nPending={nPending} openPending={openPending}
             nDupes={nDupes} openDupes={() => { go('more'); setMorePage('dupes'); setReturnTo('home') }}
             alerts={cardAlerts()} openCards={() => { go('more'); setMorePage('cards'); setReturnTo('home') }}
+            debts={owedSummary()} openDebts={() => openDebts('home')}
             future={S.recurring.length || S.txs.some((t) => t.installment) ? pendingThisMonth() : null} openFuture={() => { go('more'); setMorePage('future'); setReturnTo('home') }}
             openCategory={(categoryId, k) => { if (!categoryId) return openPending(); setFilter({ ...EMPTY_FILTER, type: k, categoryId }); go('movs') }} />}
           {tab === 'movs' && <Movs period={period} setPeriod={setPeriod} filter={filter} setFilter={setFilter} onEdit={(tx) => setSheet({ tx })} onImport={() => setImporting(true)} openPending={openPending} />}

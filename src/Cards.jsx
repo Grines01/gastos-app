@@ -16,7 +16,7 @@ export async function askReminderCheck() {
     reg.active?.postMessage({ type: 'check-reminders' })
   } catch { /* sin service worker */ }
 }
-async function enableNotify() {
+export async function enableNotify() {
   if (!notifySupported()) return toast('Este navegador no permite notificaciones')
   const perm = await Notification.requestPermission()
   if (perm !== 'granted') return toast('Sin permiso no puedo avisarte. Lo podés habilitar en los ajustes del teléfono.')
@@ -77,7 +77,7 @@ export function CardsPage() {
         {perm === 'unsupported' ? <p class="fine">Este navegador no permite notificaciones. Igual vas a ver el aviso en Inicio.</p> : (
           <>
             <p class="fine">{on
-              ? 'Activados. Te aviso 2 días antes y el mismo día de cada cierre y vencimiento. Android revisa en segundo plano cuando él decide (en general una vez por día) y además cada vez que abrís la app. El aviso también aparece en Inicio.'
+              ? 'Activados. Te aviso 2 días antes y el mismo día de cada cierre y vencimiento, y a los 2 días de un gasto compartido si alguien no te pagó. Android revisa en segundo plano cuando él decide (en general una vez por día) y además cada vez que abrís la app. El aviso también aparece en Inicio.'
               : perm === 'denied' ? 'Las notificaciones están bloqueadas para esta app. Habilitalas en Ajustes del teléfono → Apps → Mis gastos → Notificaciones.'
               : 'Activalos para recibir una notificación 2 días antes de cada cierre y vencimiento. El aviso en Inicio aparece siempre.'}</p>
             {on ? <button class="btn ghost" onClick={disableNotify}>Desactivar avisos</button>

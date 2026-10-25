@@ -8,7 +8,7 @@ import { PeriodBar } from './PeriodBar.jsx'
 import { Donut } from './charts.jsx'
 import { Seg, Empty, Icon } from './ui.jsx'
 
-export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nPending, openPending, nDupes, openDupes, alerts = [], openCards, future, openFuture }) {
+export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nPending, openPending, nDupes, openDupes, alerts = [], openCards, future, openFuture, debts, openDebts }) {
   const [sel, setSel] = useState(null)
   const rg = range(period)
   const inP = S.txs.filter((t) => inRange(t.date, rg))
@@ -57,6 +57,12 @@ export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nP
       {nDupes > 0 && (
         <button class="pending-banner dupe-banner" onClick={openDupes}>
           <span><b>{nDupes === 1 ? '1 posible duplicado' : `${nDupes} posibles duplicados`}</b>. Revisalos para que no se cuenten dos veces.</span>
+          <Icon name="right" size={18} />
+        </button>
+      )}
+      {debts?.total > 0 && (
+        <button class="fut-link debt-link" onClick={openDebts}>
+          <span>🤝 <b>Te deben <span class="num">{ars(debts.total, { decimals: false })}</span></b> · {debts.names.length <= 3 ? debts.names.join(', ') : `${debts.names.slice(0, 2).join(', ')} y ${debts.names.length - 2} más`}</span>
           <Icon name="right" size={18} />
         </button>
       )}
