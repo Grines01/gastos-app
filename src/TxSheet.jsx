@@ -6,6 +6,7 @@ import { fetchRate, RATE_KINDS } from './lib/rates.js'
 import { Sheet, Seg, Icon, toast } from './ui.jsx'
 import { dupesOf } from './Dupes.jsx'
 import { shares, knownNames, cleanName, norm, owedOf } from './lib/split.js'
+import { unusualAmount } from './lib/metrics.js'
 
 const TYPE_LABEL = { expense: 'Gasto', income: 'Ingreso', transfer: 'Transferencia' }
 
@@ -130,7 +131,9 @@ export function TxSheet({ open, tx, initialType = 'expense', onClose }) {
     if (accountId !== S.settings.defaultAccountId) saveSettings({ defaultAccountId: accountId })
     onClose()
     const other = !editing && dupesOf(saved.id)[0]?.txs.find((t) => t.id !== saved.id)
+    const odd = !editing && unusualAmount(saved)
     if (editing) toast('Cambios guardados')
+    else if (odd) toast(`¿Está bien el monto? ${money(saved.amount, { decimals: false })} es ${odd.times} veces lo habitual en ${catById(saved.categoryId)?.name || 'esta categoría'}`, { label: 'Deshacer', fn: () => remove('txs', saved.id) })
     else if (other) toast(`¿Repetido? Ya hay ${money(other.amount, { decimals: false })} el ${other.date.slice(8)}/${other.date.slice(5, 7)}${other.note ? ` (${other.note.slice(0, 24)})` : ''}`, { label: 'Deshacer', fn: () => remove('txs', saved.id) })
     else if (saved.split) toast(`Gasto compartido guardado · te deben ${money(owedOf(saved), { decimals: false })}`, { label: 'Deshacer', fn: () => remove('txs', saved.id) })
     else toast(`${TYPE_LABEL[type]} guardado`, { label: 'Deshacer', fn: () => remove('txs', saved.id) })

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks'
 import { S, tagById, balances, catById } from './lib/store.js'
-import { money as money0, today, monthName, monthShort, pad, shortDate } from './lib/format.js'
+import { money as money0, today, monthName, monthShort, pad, shortDate, toUsd, compactMoney } from './lib/format.js'
+import { spendEntries, incomeEntries } from './lib/metrics.js'
 import { getSeries, monthlyAvg, RATE_KINDS } from './lib/rates.js'
 import { Bars, Lines, HBars, Legend, StackBars } from './charts.jsx'
 import { Icon, Seg } from './ui.jsx'
@@ -22,7 +23,7 @@ const FX_KINDS = [
 const isFixed = (t) => (t.tagIds || []).some((id) => tagById(id)?.name.toLowerCase() === 'fijo')
 
 export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCategory, onEdit, openFuture }) {
-  const [unit, setUnit] = useState('ARS')
+  const [unit, setUnit] = useState('USD') // 12 meses: en dólares por defecto (la inflación no distorsiona)
   const [fx, setFx] = useState(null) // { '2026-10': 1540, ... }
   const rateKind = S.settings.rateKind || 'bolsa'
   useEffect(() => { let alive = true; getSeries(rateKind).then((s) => alive && s && setFx(monthlyAvg(s))); return () => { alive = false } }, [rateKind])
@@ -45,13 +46,15 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
   const daysPrev = new Date(y, m, 0).getDate()
   const dayNow = isCurrentMonth ? Number(today().slice(8)) : daysCur
 
-  const exp = S.txs.filter((t) => t.type === 'expense')
-  const inc = S.txs.filter((t) => t.type === 'income')
+  // gasto real (reintegros restados, sin lo programado a futuro) e ingresos sin reintegros: ver lib/metrics.js
+  const exp = spendEntries()
+  const inc = incomeEntries()
   const sumM = (arr, k, f) => arr.reduce((s, t) => (t.date.startsWith(k) && (!f || f(t)) ? s + t.amount : s), 0)
-  const hasData = (k) => S.txs.some((t) => t.date.startsWith(k))
+  const hasData = (k) => S.txs.some((t) => t.date.startsWith(k) && t.date <= today())
 
   // ---- mes elegido
   const spent = sumM(exp, cur), earned = sumM(inc, cur)
+  const refunds = -sumM(exp, cur, (e) => !!e.refund)
   const fixed = sumM(exp, cur, isFixed)
   const variable = spent - fixed
   // ---- referencia: promedio de los 3 meses anteriores con datos
@@ -59,7 +62,9 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
   const avg = (fn) => (prevKeys.length ? prevKeys.reduce((s, k) => s + fn(k), 0) / prevKeys.length : null)
   const avgSpent = avg((k) => sumM(exp, k))
   const avgFixed = avg((k) => sumM(exp, k, isFixed)) || 0
-  const avgSave = avg((k) => { const i = sumM(inc, k); return i > 0 ? (i - sumM(exp, k)) / i : 0 })
+  // ahorro de los 3 meses anteriores juntos (el ingreso llega en bloques: mes a mes salta mucho)
+  const inc3 = prevKeys.reduce((s, k) => s + sumM(inc, k), 0), exp3 = prevKeys.reduce((s, k) => s + sumM(exp, k), 0)
+  const avgSave = inc3 > 0 ? (inc3 - exp3) / inc3 : null
   // ---- proyección de cierre: fijos habituales + ritmo diario de los variables
   const projected = isCurrentMonth && dayNow >= 3 ? Math.max(fixed, avgFixed) + (variable / dayNow) * daysCur : null
   const saveRate = earned > 0 ? (earned - spent) / earned : null
@@ -78,13 +83,20 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
   const prevCum = cum(prev, days, daysPrev)
 
   // ---- últimos 12 meses (en pesos o en dólares al promedio del mes)
+  // en dólares: lo cobrado/pagado en USD va exacto; lo demás, al promedio del mes
+  const inUsd = unit === 'USD' && !!fx
+  const valOf = (e) => (inUsd ? (Math.sign(e.amount) || 1) * (toUsd(e.t || e, fx) || 0) : e.amount)
   const months = []
   for (let i = 11; i >= 0; i--) {
     const d = new Date(y, m - i, 1), k = key(d.getFullYear(), d.getMonth())
-    const r = unit === 'USD' ? fx?.[k] : 1
-    const conv = (v) => (r ? v / r : 0)
-    months.push({ label: cap(monthShort(d.getMonth())), full: `${cap(monthName(d.getMonth()))} ${d.getFullYear()}`, inc: conv(sumM(inc, k)), exp: conv(sumM(exp, k)) })
+    if (!months.length && !hasData(k)) continue // arranca en el primer mes con datos
+    const iv = inc.reduce((s, t) => (t.date.startsWith(k) ? s + valOf(t) : s), 0)
+    const ev = exp.reduce((s, e) => (e.date.startsWith(k) ? s + valOf(e) : s), 0)
+    months.push({ label: cap(monthShort(d.getMonth())), full: `${cap(monthName(d.getMonth()))} ${d.getFullYear()}`, inc: iv, exp: ev })
   }
+  const fmtU = (v, o = {}) => (inUsd ? `US$ ${Math.round(v / 100).toLocaleString('es-AR')}` : money(v, o))
+  const last3 = months.slice(-4, -1) // los 3 meses completos anteriores al elegido
+  const s3i = last3.reduce((s, x) => s + x.inc, 0), s3e = last3.reduce((s, x) => s + x.exp, 0)
 
   // ---- dólar: últimos 12 meses y lo que cobraste en cada uno
   const fxMonths = []
@@ -99,13 +111,15 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
   const usName = FX_KINDS.find((k) => k.id === usKind).name
   const rateOf = (k) => fxObj?.[usKind]?.[k] || null
   const incomeRows = fxMonths.filter((mm) => mm.income > 0).reverse()
-  const usdOf = (mm) => (rateOf(mm.k) ? mm.income / rateOf(mm.k) : null)
+  // lo cobrado en dólares va por su monto exacto; lo cobrado en pesos, al promedio del mes
+  const usdOf = (mm) => { const r = fxObj?.[usKind]; if (!r) return null; return inc.filter((t) => t.date.startsWith(mm.k)).reduce((s, t) => s + (toUsd(t, r) || 0), 0) }
 
   // ---- categorías por encima de lo habitual
   const unusual = []
   if (prevKeys.length) {
     const byCat = new Map()
     for (const t of exp) {
+      if (t.refund === 'other') continue // un reintegro suelto no tiene categoría de gasto
       const k = t.date.slice(0, 7)
       if (k !== cur && !prevKeys.includes(k)) continue
       const e = byCat.get(t.categoryId) || { cur: 0, prev: 0 }
@@ -119,11 +133,11 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
     unusual.sort((a, b) => (b.cur - b.avg) - (a.cur - a.avg))
   }
 
-  const biggest = exp.filter((t) => t.date.startsWith(cur)).sort((a, b) => b.amount - a.amount).slice(0, 5)
+  const biggest = exp.filter((e) => !e.refund && e.date.startsWith(cur)).map((e) => e.t).sort((a, b) => b.amount - a.amount).slice(0, 5)
 
   const byTag = new Map()
   for (const t of exp) if (t.date.startsWith(cur)) for (const id of t.tagIds || []) byTag.set(id, (byTag.get(id) || 0) + t.amount)
-  const tagRows = [...byTag.entries()].map(([id, value]) => ({ label: tagById(id)?.name || '—', value })).sort((a, b) => b.value - a.value)
+  const tagRows = [...byTag.entries()].filter(([, v]) => v > 0).map(([id, value]) => ({ label: tagById(id)?.name || '—', value, note: spent > 0 ? `${Math.round((value / spent) * 100)}% del gasto` : '' })).sort((a, b) => b.value - a.value)
 
   const budgets = budgetRows(cur)
   const pace = isCurrentMonth ? dayNow / daysCur : null
@@ -145,6 +159,7 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
       <section class="hero">
         <p class="hero-label">{isCurrentMonth ? 'Gastado en lo que va del mes' : 'Gastado en el mes'}</p>
         <p class="hero-val num">{money(spent)}</p>
+        {refunds > 0 && <p class="hero-usd">Neto de <span class="num">{money(refunds)}</span> de reintegros</p>}
         {fxCur && spent > 0 && <p class="hero-usd num">≈ {usd(spent / fxCur)} al {RATE_KINDS.find((k) => k.id === rateKind)?.name} promedio del mes</p>}
         {projected != null && (
           <p class="hero-sub">A este ritmo cerrás el mes en <b class="num">{money(projected)}</b>{avgSpent ? <>, contra un promedio de <b class="num">{money(avgSpent)}</b></> : null}.</p>
@@ -158,7 +173,7 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
         <div class="tile">
           <span class="tile-l">Ahorro del mes</span>
           <b class={`tile-v num ${saveRate == null ? '' : saveRate >= 0 ? 'pos' : 'neg'}`}>{saveRate == null ? '—' : `${Math.round(saveRate * 100)}%`}</b>
-          <span class="tile-s">{saveRate == null ? 'Sin ingresos cargados' : `${money(earned - spent, { sign: earned - spent < 0 ? '−' : '' })} de ${money(earned)}`}{avgSave != null ? `. Promedio ${Math.round(avgSave * 100)}%` : ''}</span>
+          <span class="tile-s">{saveRate == null ? 'Sin ingresos cargados' : `${earned - spent < 0 ? '−' : ''}${compactMoney(Math.abs(earned - spent))} ${earned - spent < 0 ? 'de más' : 'ahorrados'}`}{avgSave != null ? <><br />3 meses antes: {Math.round(avgSave * 100)}%</> : ''}</span>
         </div>
         <div class="tile">
           <span class="tile-l">Gasto variable por día</span>
@@ -168,7 +183,7 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
         <div class="tile">
           <span class="tile-l">Fijos</span>
           <b class="tile-v num">{spent ? `${Math.round((fixed / spent) * 100)}%` : '—'}</b>
-          <span class="tile-s">{money(fixed)} con etiqueta Fijo</span>
+          <span class="tile-s">del gasto: {compactMoney(fixed)} con etiqueta Fijo</span>
         </div>
       </div>
 
@@ -199,8 +214,10 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
           {fx && <Seg small value={unit} onChange={setUnit} options={[{ value: 'ARS', label: 'Pesos' }, { value: 'USD', label: 'Dólares' }]} />}
         </div>
         <Legend items={[{ label: 'Ingresos', color: C_INC }, { label: 'Gastos', color: C_EXP }]} />
-        <Bars data={months} series={[{ key: 'inc', label: 'Ingresos', color: C_INC }, { key: 'exp', label: 'Gastos', color: C_EXP }]} />
-        {unit === 'USD' && <p class="fine">En dólares {RATE_KINDS.find((k) => k.id === rateKind)?.name} al promedio de cada mes: así la inflación no distorsiona la comparación.</p>}
+        <Bars data={months} series={[{ key: 'inc', label: 'Ingresos', color: C_INC }, { key: 'exp', label: 'Gastos', color: C_EXP }]} fmt={(v) => fmtU(v)}
+          extra={(d) => d.inc > 0 ? <span class="tip-wide">Ahorro: <b class={`num ${d.inc - d.exp >= 0 ? 'pos' : 'neg'}`}>{fmtU(Math.abs(d.inc - d.exp)).replace(/^/, d.inc - d.exp < 0 ? '−' : '')}</b> ({Math.round(((d.inc - d.exp) / d.inc) * 100)}%)</span> : null} />
+        {s3i > 0 && <p class="save3">Ahorro de los 3 meses anteriores: <b class={`num ${s3i - s3e >= 0 ? 'pos' : 'neg'}`}>{Math.round(((s3i - s3e) / s3i) * 100)}%</b> ({fmtU(s3i - s3e)} de {fmtU(s3i)})</p>}
+        <p class="fine">{inUsd ? `En dólares: lo cobrado o pagado en USD va exacto; lo demás, al ${RATE_KINDS.find((k) => k.id === rateKind)?.name} promedio de cada mes. Así la inflación no distorsiona la comparación.` : 'En pesos de cada mes (con la inflación, los meses viejos se ven más chicos).'} Gastos netos de reintegros. Tocá un mes para ver el ahorro.</p>
       </section>
 
       <section class="card">
@@ -229,7 +246,7 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
                       </div>
                     ))}
                   </div>
-                  <p class="fine">En US$ = lo que cobraste ese mes dividido el dólar {usName} promedio del mes. El dólar se cambia en Más → Dólar.</p>
+                  <p class="fine">En US$: lo que cobraste en dólares va por su monto exacto ({usName} = promedio del mes, solo para lo cobrado en pesos). Sin reintegros. El dólar se cambia en Más → Dólar.</p>
                 </>
               )}
             </>
@@ -273,7 +290,7 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
       {tagRows.length > 0 && (
         <section class="card">
           <h2>Gastos por etiqueta</h2>
-          <HBars rows={tagRows} color={C_EXP} />
+          <HBars rows={tagRows} color={C_EXP} total={spent} />
         </section>
       )}
 
@@ -284,7 +301,7 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
           {accounts.length > 1 && <li class="total"><span>Total</span><b class="num">{money(totalBal, { sign: totalBal < 0 ? '−' : '' })}</b></li>}
         </ul>
         {runway != null && <p class="runway">Tus saldos cubren <b class="num">{runway.toLocaleString('es-AR', { maximumFractionDigits: 1 })} meses</b> de gastos al ritmo de tu promedio.</p>}
-        {!hasInitial && <p class="fine">Los saldos parten de cero. Cargá el saldo inicial de cada cuenta en Más → Cuentas para ver saldos reales y cuántos meses de gastos te cubren.</p>}
+        {!hasInitial && <p class="fine">Lo que entró menos lo que salió desde que empezaste a registrar.</p>}
       </section>
     </main>
   )

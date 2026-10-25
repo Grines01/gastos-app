@@ -9,23 +9,24 @@
 // No se guardan "cierres de mes": el arrastre se calcula en el momento desde el mes de inicio.
 // Así, si corregís un gasto de un mes pasado, el saldo que se arrastra se actualiza solo.
 
+import { spendEntries, incomeEntries } from './metrics.js'
+
 export const monthKey = (iso) => iso.slice(0, 7)
 export function nextMonth(k) {
   const [y, m] = k.split('-').map(Number)
   return m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
 }
 
-// Sumas por mes, una sola pasada por los movimientos
+// Sumas por mes: gasto real por categoría (con los reintegros de gastos compartidos restados)
+// e ingresos sin reintegros. Lo programado a futuro no cuenta todavía.
 export function monthTotals(txs) {
   const income = new Map() // 'YYYY-MM' → centavos
   const spent = new Map() // 'catId|YYYY-MM' → centavos
-  for (const t of txs) {
-    const k = monthKey(t.date)
-    if (t.type === 'income') income.set(k, (income.get(k) || 0) + t.amount)
-    else if (t.type === 'expense' && t.categoryId) {
-      const kk = `${t.categoryId}|${k}`
-      spent.set(kk, (spent.get(kk) || 0) + t.amount)
-    }
+  for (const t of incomeEntries(txs)) { const k = monthKey(t.date); income.set(k, (income.get(k) || 0) + t.amount) }
+  for (const e of spendEntries(txs)) {
+    if (!e.categoryId) continue
+    const kk = `${e.categoryId}|${monthKey(e.date)}`
+    spent.set(kk, (spent.get(kk) || 0) + e.amount)
   }
   return { income, spent }
 }

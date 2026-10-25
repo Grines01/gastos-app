@@ -56,7 +56,7 @@ export function projection(nMonths = 6) {
   ]
   const rows = Array.from({ length: nMonths }, (_, i) => {
     const from = dateIn(y, m + i, 1), to = dateIn(y, m + i, 31), d = new Date(y, m - 1 + i, 1)
-    const row = { k: from.slice(0, 7), label: cap(monthShort(d.getMonth())), full: `${cap(monthName(d.getMonth()))} ${d.getFullYear()}${i === 0 ? ' (lo que falta)' : ''}` }
+    const row = { k: from.slice(0, 7), dim: i === 0, label: cap(monthShort(d.getMonth())), full: `${cap(monthName(d.getMonth()))} ${d.getFullYear()}${i === 0 ? ' (lo que falta)' : ''}` }
     for (const t of exp) if (t.installment && t.date > t0 && t.date >= from && t.date <= to) { const kk = S.cards.some((c) => c.id === t.installment.cardId) ? t.installment.cardId : 'none'; row[kk] = (row[kk] || 0) + t.amount }
     row.auto = recurringItems(from, to).filter((x) => !x.paid && (i > 0 || x.date >= t0.slice(0, 8) + '01')).reduce((s, x) => s + x.amount, 0)
     row.otros = i === 0 ? Math.max(0, otrosEst - otrosPaidNow) : otrosEst
@@ -148,7 +148,7 @@ export function ProjectionCard({ onOpen, onEdit, months = 6 }) {
       <p class="proj-head">{next.full}: <b class="num">{money(next.total)}</b> comprometido{next.cuotas && next.cuotas !== next.total ? <>, <span class="num">{money(next.cuotas)}</span> en cuotas</> : null}</p>
       <Legend items={series.map((sr) => ({ label: sr.short, color: sr.color, onClick: () => fromLegend(sr.key) }))} />
       <StackBars data={rows} series={series} fmt={(v) => money(v)} onSel={setSel} onPick={(key, i) => setPick({ key, k: rows[i].k })} />
-      <p class="fine proj-hint">Tocá un color para ver qué incluye.</p>
+      <p class="fine proj-hint">Tocá un color para ver qué incluye. El mes actual (más claro) muestra solo lo que falta pagar.</p>
       {inst.length > 0 && (
         <>
           <h3 class="sub-h">Cuotas activas</h3>

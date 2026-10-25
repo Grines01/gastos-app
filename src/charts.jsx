@@ -41,7 +41,8 @@ export function Donut({ data, total, selected, onSelect, center, fmt = (v) => mo
 }
 
 // ---------- Barras agrupadas (ingresos vs gastos por mes) ----------
-export function Bars({ data, series }) {
+// opcionales: fmt(v) para el globo, extra(d) para agregar una línea al globo
+export function Bars({ data, series, fmt = (v) => money(v, { decimals: false }), extra }) {
   const [hi, setHi] = useState(null)
   const W = 340, Hh = 180, padL = 46, padB = 22, padT = 10
   const max = Math.max(1, ...data.flatMap((d) => series.map((s) => d[s.key])))
@@ -74,7 +75,8 @@ export function Bars({ data, series }) {
       {hi !== null && (
         <div class="tip">
           <strong>{data[hi].full}</strong>
-          {series.map((s) => <span><i style={{ background: s.color }} />{s.label}: <b class="num">{money(data[hi][s.key], { decimals: false })}</b></span>)}
+          {series.map((s) => <span><i style={{ background: s.color }} />{s.label}: <b class="num">{fmt(data[hi][s.key])}</b></span>)}
+          {extra?.(data[hi])}
         </div>
       )}
     </div>
@@ -101,7 +103,7 @@ export function StackBars({ data, series, fmt = (v) => money(v, { decimals: fals
           let base = padT + plotH
           const segs = series.filter((sr) => d[sr.key] > 0)
           return (
-            <g class="hit" onClick={() => setHi(hi === i ? null : i)}>
+            <g class="hit" onClick={() => setHi(hi === i ? null : i)} opacity={d.dim ? 0.5 : undefined}>
               <rect x={padL + i * gw} y={padT} width={gw} height={plotH + padB} fill="transparent" />
               {hi === i && <rect x={padL + i * gw + 1} y={padT} width={gw - 2} height={plotH} fill="var(--hover)" rx="4" />}
               {segs.map((sr, k) => {
@@ -193,14 +195,15 @@ export function Lines({ series, days, xLabel, fit, tick, xTick, fmt, extra, labe
 const lastIdx = (a) => { for (let i = a.length - 1; i >= 0; i--) if (a[i] != null) return i; return -1 }
 
 // ---------- Barras horizontales ----------
-export function HBars({ rows, color }) {
-  const max = Math.max(1, ...rows.map((r) => r.value))
+// total: si se pasa, cada barra es la parte de ese total (ej. % del gasto del mes); si no, relativa a la mayor
+export function HBars({ rows, color, total }) {
+  const max = total > 0 ? total : Math.max(1, ...rows.map((r) => r.value))
   return (
     <ul class="hbars">
       {rows.map((r) => (
         <li>
-          <div class="hb-top"><span>{r.label}</span><span class="num">{money(r.value, { decimals: false })}</span></div>
-          <div class="hb-track"><div class="hb-fill" style={{ width: `${Math.max(1.5, (r.value / max) * 100)}%`, background: color }} /></div>
+          <div class="hb-top"><span>{r.label}{r.note && <small> · {r.note}</small>}</span><span class="num">{money(r.value, { decimals: false })}</span></div>
+          <div class="hb-track"><div class="hb-fill" style={{ width: `${Math.min(100, Math.max(1.5, (r.value / max) * 100))}%`, background: color }} /></div>
         </li>
       ))}
     </ul>
