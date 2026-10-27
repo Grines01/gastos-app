@@ -137,6 +137,50 @@ export function StackBars({ data, series, fmt = (v) => money(v, { decimals: fals
   )
 }
 
+// ---------- Cascada: saldo de cada mes que sube o baja el acumulado; la última barra es el total ----------
+// data: [{ label, full, value }] (value con signo). fmt para montos.
+export function Waterfall({ data, fmt = (v) => money(v, { decimals: false }), totalLabel = 'Total' }) {
+  const [hi, setHi] = useState(null)
+  const W = 340, Hh = 180, padL = 46, padB = 22, padT = 10
+  let acc = 0
+  const bars = data.map((d) => { const from = acc; acc += d.value; return { ...d, from, to: acc } })
+  bars.push({ label: totalLabel, full: totalLabel, value: acc, from: 0, to: acc, total: true })
+  const vals = bars.flatMap((b) => [b.from, b.to])
+  const hiV = niceMax(Math.max(1, ...vals)), loV = Math.min(0, ...vals) < 0 ? -niceMax(-Math.min(...vals)) : 0
+  const plotW = W - padL - 4, plotH = Hh - padB - padT
+  const y = (v) => padT + ((hiV - v) / (hiV - loV)) * plotH
+  const gw = plotW / bars.length, bw = Math.min(22, gw * 0.62)
+  const ticks = loV < 0 ? [loV, 0, hiV] : [0, hiV / 2, hiV]
+  const color = (b) => (b.total ? 'var(--series-1)' : b.value >= 0 ? 'var(--pos)' : 'var(--neg)')
+  return (
+    <div class="chart">
+      <svg viewBox={`0 0 ${W} ${Hh}`} role="img" aria-label="Ahorro acumulado mes a mes">
+        {ticks.map((t) => <g><line x1={padL} x2={W} y1={y(t)} y2={y(t)} stroke={t === 0 ? 'var(--axis)' : 'var(--grid)'} /><text x={padL - 6} y={y(t) + 4} class="tick" text-anchor="end">{(t < 0 ? '−' : '') + compactMoney(t).replace('$ ', '')}</text></g>)}
+        {bars.map((b, i) => {
+          const x = padL + i * gw + (gw - bw) / 2, top = y(Math.max(b.from, b.to)), h = Math.max(1.5, Math.abs(y(b.from) - y(b.to)))
+          return (
+            <g class="hit" onClick={() => setHi(hi === i ? null : i)}>
+              <rect x={padL + i * gw} y={padT} width={gw} height={plotH + padB} fill="transparent" />
+              {hi === i && <rect x={padL + i * gw + 1} y={padT} width={gw - 2} height={plotH} fill="var(--hover)" rx="4" />}
+              {i > 0 && <line x1={padL + (i - 1) * gw + (gw + bw) / 2} x2={x} y1={y(b.from)} y2={y(b.from)} stroke="var(--muted)" stroke-dasharray="2 2" />}
+              <rect x={x} y={top} width={bw} height={h} rx="3" fill={color(b)} />
+              <text x={padL + i * gw + gw / 2} y={Hh - 6} class="tick" text-anchor="middle">{b.label}</text>
+            </g>
+          )
+        })}
+      </svg>
+      {hi !== null && (
+        <div class="tip">
+          <strong>{bars[hi].full}</strong>
+          {bars[hi].total ? <span>Acumulado: <b class={`num ${bars[hi].value >= 0 ? 'pos' : 'neg'}`}>{bars[hi].value < 0 ? '−' : ''}{fmt(Math.abs(bars[hi].value))}</b></span> : <>
+            <span>{bars[hi].value >= 0 ? 'Te sobró' : 'Te faltó'}: <b class={`num ${bars[hi].value >= 0 ? 'pos' : 'neg'}`}>{fmt(Math.abs(bars[hi].value))}</b></span>
+            <span class="tip-wide">Acumulado: <b class="num">{bars[hi].to < 0 ? '−' : ''}{fmt(Math.abs(bars[hi].to))}</b></span></>}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function roundTop(x, y, w, h, r) {
   return `M${x} ${y + h}V${y + r}Q${x} ${y} ${x + r} ${y}H${x + w - r}Q${x + w} ${y} ${x + w} ${y + r}V${y + h}Z`
 }

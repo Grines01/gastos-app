@@ -3,7 +3,7 @@ import { S, tagById, balances, catById } from './lib/store.js'
 import { money as money0, today, monthName, monthShort, pad, shortDate, toUsd, compactMoney } from './lib/format.js'
 import { spendEntries, incomeEntries } from './lib/metrics.js'
 import { getSeries, monthlyAvg, RATE_KINDS } from './lib/rates.js'
-import { Bars, Lines, HBars, Legend, StackBars } from './charts.jsx'
+import { Bars, Lines, HBars, Legend, StackBars, Waterfall } from './charts.jsx'
 import { Icon, Seg } from './ui.jsx'
 import { budgetRows, BudgetRow } from './Budgets.jsx'
 import { ProjectionCard } from './Future.jsx'
@@ -94,6 +94,16 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
     const ev = exp.reduce((s, e) => (e.date.startsWith(k) ? s + valOf(e) : s), 0)
     months.push({ label: cap(monthShort(d.getMonth())), full: `${cap(monthName(d.getMonth()))} ${d.getFullYear()}`, inc: iv, exp: ev })
   }
+  // ahorro del año: saldo (ingresos − gastos) de cada mes del año elegido, hasta el mes elegido
+  const yearRows = []
+  for (let mm = 0; mm <= m; mm++) {
+    const k = key(y, mm)
+    if (!yearRows.length && !hasData(k)) continue
+    const iv = inc.reduce((s, t) => (t.date.startsWith(k) ? s + valOf(t) : s), 0)
+    const ev = exp.reduce((s, e) => (e.date.startsWith(k) ? s + valOf(e) : s), 0)
+    yearRows.push({ label: cap(monthShort(mm)), full: `${cap(monthName(mm))} ${y}`, value: iv - ev, inc: iv })
+  }
+  const yearSave = yearRows.reduce((s, r) => s + r.value, 0), yearInc = yearRows.reduce((s, r) => s + r.inc, 0)
   const fmtU = (v, o = {}) => (inUsd ? `US$ ${Math.round(v / 100).toLocaleString('es-AR')}` : money(v, o))
   const last3 = months.slice(-4, -1) // los 3 meses completos anteriores al elegido
   const s3i = last3.reduce((s, x) => s + x.inc, 0), s3e = last3.reduce((s, x) => s + x.exp, 0)
@@ -207,6 +217,18 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
           { label: cap(monthName(prevD.getMonth())), color: C_PREV, values: prevCum, dashed: true },
         ]} />
       </section>
+
+      {yearRows.length > 0 && (
+        <section class="card">
+          <h2>Ahorro del año</h2>
+          <div class="kpi-year">
+            <b class={`num ${yearSave >= 0 ? 'pos' : 'neg'}`}>{yearSave < 0 ? '−' : ''}{fmtU(Math.abs(yearSave))}</b>
+            <span>acumulado en {y}{yearInc > 0 ? ` · ${Math.round((yearSave / yearInc) * 100)}% de lo que cobraste` : ''}</span>
+          </div>
+          <Waterfall data={yearRows} fmt={(v) => fmtU(v)} totalLabel={String(y).slice(2) === String(new Date().getFullYear()).slice(2) ? 'Total' : 'Total'} />
+          <p class="fine">Cada vela es lo que te sobró (verde) o te faltó (rojo) ese mes; arranca donde terminó la anterior. Gastos netos de reintegros, {inUsd ? 'en dólares' : 'en pesos'} como el gráfico de abajo. Tocá un mes para ver el detalle.</p>
+        </section>
+      )}
 
       <section class="card">
         <div class="card-head">
