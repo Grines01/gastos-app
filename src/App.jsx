@@ -14,6 +14,7 @@ import { dupeGroups } from './Dupes.jsx'
 import { askReminderCheck, cardAlerts } from './Cards.jsx'
 import { pendingThisMonth } from './Future.jsx'
 import { owedSummary } from './lib/split.js'
+import { reviewProgress } from './Review.jsx'
 import { Icon, Toaster, openSheets } from './ui.jsx'
 
 const EMPTY_FILTER = { type: 'all', categoryId: null, accountId: null, tagId: null, q: '' }
@@ -104,6 +105,7 @@ export function App() {
           {tab === 'home' && <Home period={period} setPeriod={setPeriod} kind={kind} setKind={setKind} onAdd={(type) => setSheet({ type })} nPending={nPending} openPending={openPending}
             nDupes={nDupes} openDupes={() => { go('more'); setMorePage('dupes'); setReturnTo('home') }}
             alerts={cardAlerts()} openCards={() => { go('more'); setMorePage('cards'); setReturnTo('home') }}
+            review={reviewProgress()} openReview={() => { go('more'); setMorePage('review'); setReturnTo('home') }}
             debts={owedSummary()} openDebts={() => openDebts('home')}
             future={S.recurring.length || S.txs.some((t) => t.installment) ? pendingThisMonth() : null} openFuture={() => { go('more'); setMorePage('future'); setReturnTo('home') }}
             openCategory={(categoryId, k) => { if (!categoryId) return openPending(); setFilter({ ...EMPTY_FILTER, type: k, categoryId }); go('movs') }} />}

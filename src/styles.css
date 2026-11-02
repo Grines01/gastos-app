@@ -519,3 +519,24 @@ h1, h2, h3, p { margin: 0; }
 .kpi-year { display: grid; gap: 2px; margin: 4px 0 8px; }
 .kpi-year b { font-size: 30px; font-weight: 750; letter-spacing: -0.02em; }
 .kpi-year span { font-size: 13.5px; color: var(--ink2); }
+
+/* revisión de datos */
+.rv-list { list-style: none; margin: 0 16px; padding: 0; display: grid; gap: 10px; }
+.rv-item { display: grid; gap: 4px; padding: 12px 14px; border-radius: var(--radius-m); background: var(--surface); }
+.rv-top { display: flex; justify-content: space-between; align-items: center; }
+.rv-date { font-size: 13px; color: var(--muted); font-weight: 600; }
+.rv-kind { font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; padding: 2px 8px; border-radius: 999px; background: var(--bg); color: var(--ink2); }
+.rv-kind.k-delete { color: var(--neg); }
+.rv-kind.k-add { color: var(--pos); }
+.rv-title { font-size: 15.5px; }
+.rv-detail, .rv-now { font-size: 13.5px; color: var(--ink2); }
+.rv-now { color: var(--muted); }
+.rv-now.warn { color: var(--warn-ink); }
+.rv-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.btn.danger-fill { background: var(--neg); color: #fff; }
+.rv-closed { margin: 14px 0; }
+.rv-done { list-style: none; padding: 0; margin: 6px 0; }
+.rv-done li { display: flex; gap: 8px; align-items: baseline; padding: 7px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; }
+.rv-done li span { flex: 1; min-width: 0; }
+.rv-done small { color: var(--muted); }
+.rv-foot { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 24px; }

@@ -12,10 +12,12 @@ import { DupesPage, dupeGroups } from './Dupes.jsx'
 import { CardsPage } from './Cards.jsx'
 import { FuturePage } from './Future.jsx'
 import { DebtsPage } from './Debts.jsx'
+import { ReviewPage, reviewProgress } from './Review.jsx'
 import { owedSummary } from './lib/split.js'
 
 export function More({ page, setPage, onImport, nPending, openPending, onEdit }) {
   if (page === 'dupes') return <Sub title="Posibles duplicados" back={() => setPage(null)}><DupesPage onEdit={onEdit} /></Sub>
+  if (page === 'review') return <Sub title="Revisión de datos" back={() => setPage(null)}><ReviewPage onEdit={onEdit} /></Sub>
   if (page === 'debts') return <Sub title="Te deben" back={() => setPage(null)}><DebtsPage onEdit={onEdit} /></Sub>
   if (page === 'future') return <Sub title="Pagos futuros" back={() => setPage(null)}><FuturePage onConfirm={(t) => onEdit(t)} /></Sub>
   if (page === 'cards') return <Sub title="Tarjetas" back={() => setPage(null)}><CardsPage /></Sub>
@@ -45,6 +47,7 @@ export function More({ page, setPage, onImport, nPending, openPending, onEdit })
         <li><button onClick={() => setPage('cards')}><span>Tarjetas</span><small>{S.cards.length || ''}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('budgets')}><span>Presupuestos</span><small>{S.budgets.length || ''}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('export')}><span>Exportar a Excel</span><small>gastos e ingresos</small><Icon name="right" size={18} /></button></li>
+        <li><button onClick={() => setPage('review')}><span>Revisión de datos</span><small>{reviewProgress()?.left || ''}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('dupes')}><span>Posibles duplicados</span><small>{dupeGroups().length || ''}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={openPending}><span>Sin categoría</span><small>{nPending}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('accounts')}><span>Cuentas</span><small>{S.accounts.filter((a) => !a.archived).length}</small><Icon name="right" size={18} /></button></li>

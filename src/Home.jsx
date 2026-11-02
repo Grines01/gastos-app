@@ -7,7 +7,7 @@ import { PeriodBar } from './PeriodBar.jsx'
 import { spendEntries, incomeEntries, refundCatIds } from './lib/metrics.js'
 import { Seg, Empty, Icon } from './ui.jsx'
 
-export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nPending, openPending, nDupes, openDupes, alerts = [], openCards, future, openFuture, debts, openDebts }) {
+export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nPending, openPending, nDupes, openDupes, alerts = [], openCards, future, openFuture, debts, openDebts, review, openReview }) {
   const rg = range(period)
   // gasto real (reintegros restados, sin lo programado a futuro) e ingresos sin reintegros: ver lib/metrics.js
   const expE = spendEntries().filter((e) => inRange(e.date, rg))
@@ -59,6 +59,12 @@ export function Home({ period, setPeriod, kind, setKind, openCategory, onAdd, nP
       {alerts.length > 0 && (
         <button class="pending-banner card-banner" onClick={openCards}>
           <span>{alerts.map((a) => <span class="cb-line">💳 <b>{a.text}</b></span>)}</span>
+          <Icon name="right" size={18} />
+        </button>
+      )}
+      {review?.left > 0 && (
+        <button class="pending-banner dupe-banner" onClick={openReview}>
+          <span><b>Revisión de datos: {review.left} {review.left === 1 ? 'cambio pendiente' : 'cambios pendientes'}</b> de {review.total}. Tocá para seguir.</span>
           <Icon name="right" size={18} />
         </button>
       )}
