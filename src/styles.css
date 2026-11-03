@@ -540,3 +540,10 @@ h1, h2, h3, p { margin: 0; }
 .rv-done li span { flex: 1; min-width: 0; }
 .rv-done small { color: var(--muted); }
 .rv-foot { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 24px; }
+
+/* evolución por categoría */
+.ce-pick { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 4px 0 6px; }
+.ce-pick input { font: inherit; }
+.ce-chips { margin: 2px 0 6px; }
+.ce-head { font-size: 14px; color: var(--ink2); margin: 6px 0 2px; }
+.ce-head b { color: var(--ink); }

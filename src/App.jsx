@@ -114,10 +114,11 @@ export function App() {
             openAccounts={() => { fromDash('more'); setMorePage('accounts') }}
             openBudgets={() => { fromDash('more'); setMorePage('budgets') }}
             openFuture={() => { fromDash('more'); setMorePage('future') }}
-            openCategory={(categoryId, month) => {
+            openCategory={(categoryId, month, q) => {
               setPeriod({ kind: 'month', anchor: `${month}-01` })
               if (!categoryId) return openPending()
-              setFilter({ ...EMPTY_FILTER, type: 'expense', categoryId }); fromDash('movs')
+              const one = (q || '').split(',').map((x) => x.trim()).filter(Boolean)
+              setFilter({ ...EMPTY_FILTER, type: 'expense', categoryId, q: one.length === 1 ? one[0] : '' }); fromDash('movs')
             }} />}
           {tab === 'more' && <More onEdit={(tx) => setSheet({ tx })} page={morePage} setPage={setMore} onImport={() => setImporting(true)} nPending={nPending} openPending={openPending} />}
           <nav class="nav" aria-label="Secciones">

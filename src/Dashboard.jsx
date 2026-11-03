@@ -7,6 +7,7 @@ import { Bars, Lines, HBars, Legend, StackBars, Waterfall } from './charts.jsx'
 import { Icon, Seg } from './ui.jsx'
 import { budgetRows, BudgetRow } from './Budgets.jsx'
 import { ProjectionCard } from './Future.jsx'
+import { CatEvolution } from './CatEvo.jsx'
 
 const money = (c, o = {}) => money0(c, { decimals: false, ...o })
 const usd = (cents) => `US$ ${Math.round(cents / 100).toLocaleString('es-AR')}`
@@ -217,6 +218,8 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
           { label: cap(monthName(prevD.getMonth())), color: C_PREV, values: prevCum, dashed: true },
         ]} />
       </section>
+
+      <CatEvolution y={y} m={m} fx={fx} openMovs={(id, k, q) => openCategory(id, k, q)} />
 
       {yearRows.length > 0 && (
         <section class="card">

@@ -42,14 +42,15 @@ export function Donut({ data, total, selected, onSelect, center, fmt = (v) => mo
 
 // ---------- Barras agrupadas (ingresos vs gastos por mes) ----------
 // opcionales: fmt(v) para el globo, extra(d) para agregar una línea al globo
-export function Bars({ data, series, fmt = (v) => money(v, { decimals: false }), extra }) {
+// avg: dibuja una línea punteada de promedio · d.dim: barra atenuada (ej. mes en curso)
+export function Bars({ data, series, fmt = (v) => money(v, { decimals: false }), extra, avg, avgLabel }) {
   const [hi, setHi] = useState(null)
   const W = 340, Hh = 180, padL = 46, padB = 22, padT = 10
-  const max = Math.max(1, ...data.flatMap((d) => series.map((s) => d[s.key])))
+  const max = Math.max(1, avg || 0, ...data.flatMap((d) => series.map((s) => d[s.key])))
   const nice = niceMax(max)
   const plotW = W - padL - 4, plotH = Hh - padB - padT
   const gw = plotW / data.length
-  const bw = Math.max(3, Math.min(12, (gw - 6) / series.length - 2))
+  const bw = Math.max(3, Math.min(series.length === 1 ? 18 : 12, (gw - 6) / series.length - 2))
   const y = (v) => padT + plotH - (v / nice) * plotH
   const ticks = [0, nice / 2, nice]
   return (
@@ -59,7 +60,7 @@ export function Bars({ data, series, fmt = (v) => money(v, { decimals: false }),
         {data.map((d, i) => {
           const gx = padL + i * gw + (gw - series.length * (bw + 2)) / 2
           return (
-            <g onClick={() => setHi(hi === i ? null : i)} class="hit">
+            <g onClick={() => setHi(hi === i ? null : i)} class="hit" opacity={d.dim ? 0.5 : undefined}>
               <rect x={padL + i * gw} y={padT} width={gw} height={plotH + padB} fill="transparent" />
               {hi === i && <rect x={padL + i * gw + 1} y={padT} width={gw - 2} height={plotH} fill="var(--hover)" rx="4" />}
               {series.map((s, k) => {
@@ -71,6 +72,7 @@ export function Bars({ data, series, fmt = (v) => money(v, { decimals: false }),
           )
         })}
         <line x1={padL} x2={W} y1={padT + plotH} y2={padT + plotH} stroke="var(--axis)" stroke-width="1" />
+        {avg > 0 && <g class="avg-line"><line x1={padL} x2={W} y1={y(avg)} y2={y(avg)} stroke="var(--ink2)" stroke-dasharray="4 3" stroke-width="1.2" />{avgLabel && <text x={padL + 3} y={y(avg) - 4} class="tick" text-anchor="start">{avgLabel}</text>}</g>}
       </svg>
       {hi !== null && (
         <div class="tip">
