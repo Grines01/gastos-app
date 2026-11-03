@@ -16,11 +16,12 @@ db.version(1).stores({
 db.version(2).stores({ budgets: 'id, categoryId' })
 db.version(3).stores({ cards: 'id' })
 db.version(4).stores({ recurring: 'id' })
+db.version(5).stores({ snapshots: 'id, date' }) // fotos del patrimonio
 
-const TABLES = ['accounts', 'categories', 'tags', 'txs', 'rules', 'batches', 'budgets', 'cards', 'recurring']
+const TABLES = ['accounts', 'categories', 'tags', 'txs', 'rules', 'batches', 'budgets', 'cards', 'recurring', 'snapshots']
 
 // Todo el estado vive en memoria (son pocos miles de filas); IndexedDB es la persistencia.
-export const S = { ready: false, accounts: [], categories: [], tags: [], txs: [], rules: [], batches: [], budgets: [], cards: [], recurring: [], settings: {}, v: 0 }
+export const S = { ready: false, accounts: [], categories: [], tags: [], txs: [], rules: [], batches: [], budgets: [], cards: [], recurring: [], snapshots: [], settings: {}, v: 0 }
 const listeners = new Set()
 function emit() { S.v++; listeners.forEach((f) => f()) }
 
@@ -38,6 +39,7 @@ function sortAll() {
   S.categories.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
   S.accounts.sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
   S.tags.sort((a, b) => a.name.localeCompare(b.name, 'es'))
+  S.snapshots.sort((a, b) => (a.date < b.date ? -1 : 1))
 }
 
 export async function load() {
@@ -94,7 +96,8 @@ export async function bulkPut(table, objs) {
   if (!objs.length) return
   await db[table].bulkPut(objs)
   const byId = new Map(objs.map((o) => [o.id, o]))
-  S[table] = S[table].map((x) => byId.get(x.id) || x)
+  const have = new Set(S[table].map((x) => x.id))
+  S[table] = [...S[table].map((x) => byId.get(x.id) || x), ...objs.filter((o) => !have.has(o.id))] // los nuevos también
   sortAll(); emit()
 }
 export const isPending = (t) => (t.type === 'expense' || t.type === 'income') && !t.categoryId

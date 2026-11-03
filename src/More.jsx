@@ -13,10 +13,12 @@ import { CardsPage } from './Cards.jsx'
 import { FuturePage } from './Future.jsx'
 import { DebtsPage } from './Debts.jsx'
 import { ReviewPage, reviewProgress } from './Review.jsx'
+import { WealthPage } from './Wealth.jsx'
 import { owedSummary } from './lib/split.js'
 
 export function More({ page, setPage, onImport, nPending, openPending, onEdit }) {
   if (page === 'dupes') return <Sub title="Posibles duplicados" back={() => setPage(null)}><DupesPage onEdit={onEdit} /></Sub>
+  if (page === 'wealth') return <Sub title="Patrimonio" back={() => setPage(null)}><WealthPage /></Sub>
   if (page === 'review') return <Sub title="Revisión de datos" back={() => setPage(null)}><ReviewPage onEdit={onEdit} /></Sub>
   if (page === 'debts') return <Sub title="Te deben" back={() => setPage(null)}><DebtsPage onEdit={onEdit} /></Sub>
   if (page === 'future') return <Sub title="Pagos futuros" back={() => setPage(null)}><FuturePage onConfirm={(t) => onEdit(t)} /></Sub>
@@ -43,6 +45,7 @@ export function More({ page, setPage, onImport, nPending, openPending, onEdit })
       )}
       <ul class="menu">
         <li><button onClick={() => setPage('debts')}><span>Te deben</span><small>{owedSummary().total ? money(owedSummary().total, { decimals: false }) : ''}</small><Icon name="right" size={18} /></button></li>
+        <li><button onClick={() => setPage('wealth')}><span>Patrimonio</span><small>{S.snapshots.length ? `${S.snapshots.length} fotos` : ''}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('future')}><span>Pagos futuros</span><small>{S.recurring.length || ''}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('cards')}><span>Tarjetas</span><small>{S.cards.length || ''}</small><Icon name="right" size={18} /></button></li>
         <li><button onClick={() => setPage('budgets')}><span>Presupuestos</span><small>{S.budgets.length || ''}</small><Icon name="right" size={18} /></button></li>

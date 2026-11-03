@@ -114,6 +114,7 @@ export function App() {
             openAccounts={() => { fromDash('more'); setMorePage('accounts') }}
             openBudgets={() => { fromDash('more'); setMorePage('budgets') }}
             openFuture={() => { fromDash('more'); setMorePage('future') }}
+            openWealth={() => { fromDash('more'); setMorePage('wealth') }}
             openCategory={(categoryId, month, q) => {
               setPeriod({ kind: 'month', anchor: `${month}-01` })
               if (!categoryId) return openPending()

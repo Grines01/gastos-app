@@ -8,6 +8,7 @@ import { Icon, Seg } from './ui.jsx'
 import { budgetRows, BudgetRow } from './Budgets.jsx'
 import { ProjectionCard } from './Future.jsx'
 import { CatEvolution } from './CatEvo.jsx'
+import { wealthHeadline } from './Wealth.jsx'
 
 const money = (c, o = {}) => money0(c, { decimals: false, ...o })
 const usd = (cents) => `US$ ${Math.round(cents / 100).toLocaleString('es-AR')}`
@@ -23,7 +24,7 @@ const FX_KINDS = [
 ]
 const isFixed = (t) => (t.tagIds || []).some((id) => tagById(id)?.name.toLowerCase() === 'fijo')
 
-export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCategory, onEdit, openFuture }) {
+export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCategory, onEdit, openFuture, openWealth }) {
   const [unit, setUnit] = useState('USD') // 12 meses: en dólares por defecto (la inflación no distorsiona)
   const [fx, setFx] = useState(null) // { '2026-10': 1540, ... }
   const rateKind = S.settings.rateKind || 'bolsa'
@@ -318,6 +319,13 @@ export function Dashboard({ anchor, setAnchor, openAccounts, openBudgets, openCa
           <HBars rows={tagRows} color={C_EXP} total={spent} />
         </section>
       )}
+
+      {(() => { const w = wealthHeadline(); return w && (
+        <section class="card">
+          <div class="card-head"><h2>Patrimonio</h2><button class="link-btn" onClick={openWealth}>Ver detalle</button></div>
+          <p class="wl-head"><b class="num">US$ {Math.round(w.net / 100).toLocaleString('es-AR')}</b> netos al {w.date.slice(8)}/{w.date.slice(5, 7)}{w.delta != null && <span class={w.delta >= 0 ? 'pos' : 'neg'}> · {w.delta >= 0 ? '+' : '−'}US$ {Math.round(Math.abs(w.delta) / 100).toLocaleString('es-AR')} desde la foto anterior</span>}</p>
+        </section>
+      ) })()}
 
       <section class="card">
         <div class="card-head"><h2>Cuentas</h2><button class="link-btn" onClick={openAccounts}>Editar</button></div>
