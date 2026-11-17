@@ -1,0 +1,5 @@
+node_modules
+dist
+*.json.bak
+gastos-*.json
+.DS_Store
